@@ -1,0 +1,16 @@
+{
+  "name": "shadowpool-iapp",
+  "version": "0.0.1",
+  "description": "",
+  "main": "src/app.js",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "viem": "^2.37.5"
+  },
+  "devDependencies": {
+    "@iexec/iapp": "^1.3.4"
+  }
+}

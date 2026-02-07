@@ -1,0 +1,409 @@
+E2E PROCESS LOG — ShadowPool + iExec TEE matching (Arbitrum Sepolia)
+Date: 2026-02-05
+Repo root: /Users/aomine/Desktop/iexec2
+
+Scope
+-----
+This file captures the detailed end-to-end workflow that was executed successfully to:
+1) Deploy the ShadowPool contracts (IntentRegistry, RootRegistry, Hook, PoolSwapTest) on Arbitrum Sepolia.
+2) Mint test ERC20s to two trader accounts.
+3) Protect two intents (buy + sell) using iExec DataProtector.
+4) Grant bulk access to the iApp so it can read protected intents in a TEE task.
+5) Trigger iExec TEE “matching” via a bulk request and wait for a result.
+6) Post the resulting merkle root on-chain (close round + post root).
+7) Execute a swap through Uniswap v4’s PoolSwapTest router with hook data, proving inclusion and signature.
+
+Primary scripts / code touched
+-----------------------------
+1) E2E orchestrator script:
+   /Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/deploy-test-tokens.mjs
+
+2) iApp (TEE) matcher logic:
+   /Users/aomine/Desktop/iexec2/shadowpool-iapp/hello-world/src/app.js
+
+3) Contract deployment script (Foundry):
+   /Users/aomine/Desktop/iexec2/shadowpool-hook/script/DeployShadowPool.s.sol
+
+
+How to re-run the E2E
+--------------------
+Run from the terminal package:
+  cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+  node scripts/deploy-test-tokens.mjs --e2e
+
+Equivalent npm script invocation:
+  cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+  npm run deploy:test-tokens -- --e2e
+
+Expected success signal:
+  - iExec bulk request completes with task success=true
+  - A final JSON block is printed under:
+      E2E summary:
+    with swapTxHash and amountOut
+
+
+Prerequisites and environment
+-----------------------------
+Network:
+  - Arbitrum Sepolia
+  - RPC URL can come from .env (ARBITRUM_SEPOLIA_RPC_URL) or fall back to:
+      https://arb-sepolia.g.alchemy.com/v2/lB78AtqzCmwOOeJqlKXYa
+
+Required secrets / keys (repo root .env):
+  - PRIVATE_KEY
+      Admin/deployer EOA used to:
+        * deploy contracts
+        * act as iExec requester
+        * post root
+        * set hook allowed caller
+        * sign the match leaf (when signature is missing from iApp result)
+  - TEST_PRIVATE_KEY1
+  - TEST_PRIVATE_KEY2
+      Two trader EOAs used to:
+        * protect two intents (buy/sell)
+        * submit intents to IntentRegistry
+        * execute the swap (one of them, selected based on match.trader)
+
+iExec config (repo root .env and/or env vars):
+  - VITE_IEXEC_APP_ADDRESS (preferred) OR a deployment record available at:
+      /Users/aomine/Desktop/iexec2/shadowpool-iapp/hello-world/cache/arbitrum-sepolia-testnet/deployments.json
+    The E2E script resolves the iExec app address from:
+      process.env.VITE_IEXEC_APP_ADDRESS
+      env.VITE_IEXEC_APP_ADDRESS
+      env.VITE_IEXEC_APP
+      env.VITE_IEXEC_APP_WHITELIST
+      and then (if present) it also reads the latest iApp deployment record and uses it if no env var was set.
+
+  - VITE_IEXEC_WORKERPOOL_ADDRESS / IEXEC_WORKERPOOL_ADDRESS (optional)
+      Default in script:
+        0xB967057a21dc6A66A29721d96b8Aa7454B7c383F
+  - VITE_IEXEC_WORKERPOOL_MAX_PRICE_NRLC / IEXEC_WORKERPOOL_MAX_PRICE_NRLC (optional)
+      Default in script:
+        1000000000 (nRLC)
+
+
+Detailed process steps (chronological)
+--------------------------------------
+Step 0 — Start E2E mode
+  Command:
+    node scripts/deploy-test-tokens.mjs --e2e
+
+  What “--e2e” toggles:
+    - Runs the full E2E function runShadowPoolE2E()
+    - Forces a deterministic deployment configuration intended for E2E:
+        * Sets TEE_SIGNER_ADDRESS to the admin/deployer address so on-chain hook verification
+          matches what is used during E2E (see “Step 1”)
+        * Ensures a round intake window is available by setting ROUND_INTAKE_WINDOW_SECONDS
+          (defaults to ROUND_DURATION_SECONDS or 3600 if missing)
+      Reference:
+        deploy-test-tokens.mjs (runDeployScript):
+          lines ~210-225
+
+
+Step 1 — Deploy contracts (Foundry)
+  Trigger:
+    If “--skip-deploy” is NOT passed, the script deploys via Foundry:
+
+  Implementation:
+    - Runs forge script:
+        script/DeployShadowPool.s.sol:DeployShadowPool
+    - Uses the admin private key
+    - Exports environment variables into the forge process
+    - Under --e2e:
+        childEnv.TEE_SIGNER_ADDRESS = admin address
+
+  Artifacts:
+    - Foundry broadcast output written under:
+        /Users/aomine/Desktop/iexec2/shadowpool-hook/broadcast/DeployShadowPool.s.sol/<chainId>/run-latest.json
+    - deploy-test-tokens.mjs reads run-latest.json and extracts:
+        VITE_SHADOWPOOL_INTENT_REGISTRY_ADDRESS
+        VITE_SHADOWPOOL_ROOT_REGISTRY_ADDRESS
+        VITE_SHADOWPOOL_HOOK_ADDRESS
+        VITE_POOL_SWAP_TEST_ADDRESS
+        VITE_TOKEN_A_ADDRESS
+        VITE_TOKEN_B_ADDRESS
+        VITE_POOL_FEE
+        VITE_POOL_TICK_SPACING
+
+
+Step 2 — Mint test tokens to traders
+  What happens:
+    - For each token in [TokenA, TokenB]
+    - For each trader in [TEST_PRIVATE_KEY1, TEST_PRIVATE_KEY2]
+    - Call MockERC20.mint(to, amount)
+    - Wait for receipts and record tx hashes and gas used
+
+  Amount minted per trader per token:
+    transferAmount = 1000 * 10^18
+
+  Why this matters:
+    - The swap is executed by one of the traders; they must have token balances
+      and be able to approve the router for tokenIn.
+
+
+Step 3 — Resolve addresses and guardrails
+  Addresses required for E2E:
+    - intentRegistryAddress
+    - rootRegistryAddress
+    - hookAddress
+    - swapRouterAddress
+    - tokenA / tokenB
+
+  iExec app address required:
+    - iExecAppAddress must be a valid address, otherwise E2E aborts.
+      Reference:
+        deploy-test-tokens.mjs runShadowPoolE2E()
+          checks this early (near the start of runShadowPoolE2E)
+
+
+Step 4 — Check intake window and read current roundId
+  Contracts:
+    - IntentRegistry
+
+  Reads:
+    - isWithinIntakeWindow(block.timestamp)
+      If false, E2E aborts with:
+        “Current round intake window is closed...”
+    - currentRoundId()
+
+  Why this matters:
+    Intents can only be registered while intake window is open.
+
+
+Step 5 — Create two intent payloads (one buy, one sell)
+  Intent contents (high level):
+    - side: buy or sell
+    - tokenPair:
+        base: TokenA
+        quote: TokenB
+    - amount: “10”
+    - limitPrice: “1”
+    - expiry: now + 3600 seconds
+    - slippageMin/slippageMax (percent values)
+    - notes: “e2e”
+
+  These are later normalized into the protected payload fields:
+    version, trader, side, baseToken, quoteToken, amountBase, limitPrice, expiry, salt, tokenPair, slippageMin, slippageMax, notes
+
+
+Step 6 — Protect each intent using iExec DataProtector
+  Per trader:
+    - Create an EIP-1193 provider from trader private key (viem clients)
+    - Create DataProtector core:
+        new IExecDataProtector(provider, { allowExperimentalNetworks: true }).core
+    - Compute a salt:
+        salt = keccak256(abiPacked(roundId, trader, Date.now()))
+    - Call protectData() to create an on-chain protected data asset
+
+  Outputs:
+    - protectedData.address for each trader
+
+
+Step 7 — Grant bulk access to the iExec app (critical for TEE reading)
+  Per protected data:
+    - grantAccess({
+        protectedData: protectedData.address,
+        authorizedApp: iExecAppAddress,
+        authorizedUser: admin (requester),
+        allowBulk: true,
+        pricePerAccess: 0
+      })
+
+  Output:
+    - The returned “granted” object is stored as the bulk dataset access order
+      (“grantOrder”) for later use in prepareBulkRequest().
+
+  Failure mode addressed during this work:
+    If the app cannot read the protected dataset, the TEE task produces no usable intents
+    and the E2E can end up throwing “No matches produced”.
+
+
+Step 8 — Commit and register intents on-chain
+  Commitment computation:
+    commitment = keccak256(abiEncode(
+      sideAsUint8, trader, baseToken, quoteToken, amountBaseWei, limitPriceWad, expirySeconds, saltBytes32
+    ))
+    - amountBaseWei = parseUnits(intent.amount, baseDecimals)
+    - limitPriceWad = parseUnits(intent.limitPrice, 18)
+
+  On-chain registration:
+    IntentRegistry.registerIntent(roundId, protectedData.address, commitment)
+
+  Outputs recorded:
+    - submitTxHash
+    - gas used
+
+
+Step 9 — Prepare bulk request for iExec TEE matching
+  Inputs built:
+    - bulkAccesses:
+        array of grantOrder objects from grantAccess(allowBulk=true)
+    - commitmentsByProtectedData:
+        map protectedDataAddress -> commitment
+    - protectedDataByTrader:
+        map traderAddress -> protectedDataAddress
+
+  Ensure a free apporder exists:
+    - ensureFreeAppOrderPublished() checks the app orderbook with tag [tee, scone]
+    - If no apporder exists with price <= 0, it publishes one (price 0, volume 1,000,000)
+
+  prepareBulkRequest() call:
+    adminDp.prepareBulkRequest({
+      bulkAccesses,
+      app: iExecAppAddress,
+      workerpool: iexecWorkerpool,
+      workerpoolMaxPrice: iexecWorkerpoolMaxPrice,
+      args: JSON.stringify({ roundId, commitmentsByProtectedData, protectedDataByTrader }),
+      encryptResult: false,
+      maxProtectedDataPerTask: 100
+    })
+
+  Notes:
+    - The args JSON is how the iApp gets the roundId and mapping data that it needs to
+      build leaves that match the on-chain commitments.
+
+
+Step 10 — Ensure requester stake is sufficient (fix for “stake 0” failures)
+  Problem observed previously:
+    iExec error:
+      “Cost per task (...) is greater than requester account stake (0)”
+
+  Fix that is now part of the E2E flow:
+    - ensureRequesterStake() checks the requester’s iExec account stake
+    - Computes a minimum required stake from:
+        (appmaxprice + datasetmaxprice + workerpoolmaxprice) * volume
+    - Deposits the missing amount plus a buffer (100,000,000 nRLC)
+
+  Key implementation:
+    - iexec.account.checkBalance(requesterAddress)
+    - iexec.account.deposit(toDeposit)
+
+
+Step 11 — Process the bulk request (TEE matching) and wait for result.json
+  Execution:
+    adminDp.processBulkRequest({
+      bulkRequest,
+      workerpool: iexecWorkerpool,
+      waitForResult: true,
+      path: "result.json",
+      onStatusUpdate: (...) => logs progress and captures deal/task IDs
+    })
+
+  Result handling:
+    - Each task result is decoded from ArrayBuffer to JSON
+    - A merged result object is selected where “matches” is an array
+    - If matches are empty, E2E throws:
+        “No matches produced”
+
+  Important iApp-side behavior (what enables matches to exist):
+    The iApp reads iExec input files and extracts JSON intents even when the dataset
+    is provided as a zip, gzip, or zlib stream. It also avoids mistakenly trying to open
+    Ethereum addresses as file names.
+    Reference:
+      shadowpool-iapp/hello-world/src/app.js
+        - candidate path resolution ignores strings that look like addresses or hashes
+        - tryParseJsonFromBuffer supports:
+            * JSON text
+            * gzip
+            * zlib/deflate
+            * zip archives (scans entries, prefers .json)
+        - debugInputs/debugParsed are written into result.json for troubleshooting
+
+
+Step 12 — Close round and post merkle root to RootRegistry
+  On-chain operations (admin account):
+    - closeRound(roundId)
+    - postRoot(roundId, merkleRoot, validUntil)
+
+  validUntil:
+    - Derived from the round expiry in the iExec result (earliest match expiry)
+
+
+Step 13 — Execute a swap using the match + hook data (final chain validation)
+  13.1 Pick a match and trader signer
+    - Picks the first match with a trader field
+    - Selects trader private key based on match.trader
+
+  13.2 ERC20 approval for tokenIn
+    - Reads allowance(trader, swapRouterAddress)
+    - Approves amountIn if needed
+
+  13.3 Allow router on hook (admin-gated)
+    - Reads hook.allowedCaller(swapRouterAddress)
+    - Calls hook.setAllowedCaller(swapRouterAddress, true) if needed
+
+  13.4 Build hook data payload
+    - Requires:
+        roundId, matchIdHash, trader, counterparty, tokenIn, tokenOut,
+        amountIn, minAmountOut, expiry, merkleProof, signature
+    - If the match result has no signature, the admin signs leaf as a fallback.
+
+  13.5 Simulate and execute PoolSwapTest.swap(...)
+    - Uses viem simulateContract first, then writeContract
+    - Swap params:
+        * currency0/currency1 are sorted by address
+        * zeroForOne derived from tokenIn == currency0
+        * amountSpecified uses negative amountIn (exact input)
+        * sqrtPriceLimitX96 uses MIN/MAX bounds constants
+
+  Critical bug fixed here:
+    Error observed previously:
+      “Position `32` is out of bounds (`0 < position < 32`)”
+    Root cause:
+      The swap ABI return type was declared incorrectly as a tuple.
+      In Uniswap v4 PoolSwapTest, swap returns a packed BalanceDelta as an int256.
+    Fix:
+      Updated ABI signature to:
+        returns (int256 delta)
+      Reference:
+        deploy-test-tokens.mjs swapAbi parseAbi(...)
+
+  13.6 Post-swap assertions and summary
+    - Computes amountOut by comparing tokenOut balance before/after
+    - The script currently checks output using:
+        minOutBps = 0
+        effectiveMinAmountOut = minAmountOut * minOutBps / 10_000
+      so it does not enforce minAmountOut in the script itself.
+    - Prints:
+        E2E summary:
+        { ... swapTxHash, amountOut, contract addresses, iExec task info, etc. }
+
+
+Verification performed after E2E
+-------------------------------
+From:
+  /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+
+Commands:
+  npm run lint
+  npx tsc -p tsconfig.json --noEmit
+
+Outcome:
+  - No typecheck errors
+  - Lint reports only warnings (react-refresh/only-export-components) and no errors
+
+
+Troubleshooting checklist (common failures)
+------------------------------------------
+1) “No matches produced”
+  - Confirm intake window is open (IntentRegistry.isWithinIntakeWindow).
+  - Confirm iExec app address is correct and reachable:
+      VITE_IEXEC_APP_ADDRESS (or the latest deployments.json entry).
+  - Confirm grantAccess() is called with allowBulk=true and authorizedApp=iExecAppAddress.
+  - Inspect iExec result.json debug fields:
+      debugInputs + debugParsed in the iApp output.
+    These show what files were seen, sizes/magic bytes, and whether parsing worked.
+
+2) “Cost per task (...) > requester stake (0)”
+  - ensureRequesterStake() should deposit automatically now.
+  - If it still fails, check that the requester wallet has enough RLC available to stake
+    and that the network/account matches what you think it is.
+
+3) Swap simulation revert / hook errors
+  - The script attempts to decode WrappedError(...) and inner hook errors.
+  - Typical causes:
+      RootNotSet / RootExpired / InvalidProof / InvalidSignature / MatchExpired / UnauthorizedCaller
+  - Ensure closeRound + postRoot succeeded and the hook router is allowed.
+
+4) ABI decode error “Position 32 out of bounds”
+  - Confirm PoolSwapTest.swap ABI return is int256 delta (not a tuple).

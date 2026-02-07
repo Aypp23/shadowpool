@@ -1,0 +1,13 @@
+{
+  "name": "shadowpool-iapp",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/app.js",
+    "test:local": "IEXEC_IN=./temp/iexec_in IEXEC_OUT=./temp/iexec_out IEXEC_ARGS='{\"roundId\":\"round_001\"}' node src/app.js"
+  },
+  "dependencies": {
+    "viem": "^2.37.5"
+  }
+}

@@ -1,0 +1,433 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,100..900&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   iExec ShadowPool — $100,000,000,000 Noir Trading Terminal
+   Premium. Cinematic. Unmistakably Crafted.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    /* ─────────────────────────────────────────────────────────────────────────
+       Deep Void Foundation — Never pure black, always dimensional
+       ───────────────────────────────────────────────────────────────────────── */
+    --background: 225 15% 4%;
+    --foreground: 45 15% 96%;
+    
+    /* Layered surfaces with depth */
+    --card: 225 12% 7%;
+    --card-foreground: 45 15% 96%;
+    
+    --popover: 225 12% 5%;
+    --popover-foreground: 45 15% 96%;
+    
+    /* ─────────────────────────────────────────────────────────────────────────
+       Platinum Silver — The signature accent (Monochrome)
+       ───────────────────────────────────────────────────────────────────────── */
+    --primary: 220 10% 75%;
+    --primary-foreground: 225 15% 4%;
+    
+    /* Cool charcoal surfaces */
+    --secondary: 225 10% 10%;
+    --secondary-foreground: 220 8% 82%;
+    
+    /* Muted elements */
+    --muted: 225 8% 14%;
+    --muted-foreground: 220 8% 50%;
+    
+    /* Accent matches primary */
+    --accent: 220 10% 75%;
+    --accent-foreground: 225 15% 4%;
+    
+    /* Errors — Muted, sophisticated red */
+    --destructive: 0 65% 42%;
+    --destructive-foreground: 45 15% 96%;
+    
+    /* Borders and inputs */
+    --border: 225 8% 12%;
+    --input: 225 10% 8%;
+    --ring: 220 10% 75%;
+    
+    --radius: 0.875rem;
+    
+    /* ─────────────────────────────────────────────────────────────────────────
+       Status Colors — Monochrome with subtle tints
+       ───────────────────────────────────────────────────────────────────────── */
+    --status-draft: 225 12% 35%;
+    --status-protected: 210 15% 55%;
+    --status-granted: 200 12% 60%;
+    --status-submitted: 220 10% 75%;
+    --status-matched: 180 8% 65%;
+    --status-executed: 0 0% 90%;
+    --status-expired: 0 10% 40%;
+    
+    /* Sidebar */
+    --sidebar-background: 225 15% 3%;
+    --sidebar-foreground: 220 8% 72%;
+    --sidebar-primary: 220 10% 75%;
+    --sidebar-primary-foreground: 225 15% 4%;
+    --sidebar-accent: 225 10% 8%;
+    --sidebar-accent-foreground: 220 8% 88%;
+    --sidebar-border: 225 8% 10%;
+    --sidebar-ring: 220 10% 75%;
+  }
+
+  .dark {
+    --background: 225 15% 4%;
+    --foreground: 220 8% 96%;
+    --card: 225 12% 7%;
+    --card-foreground: 220 8% 96%;
+    --popover: 225 12% 5%;
+    --popover-foreground: 220 8% 96%;
+    --primary: 220 10% 75%;
+    --primary-foreground: 225 15% 4%;
+    --secondary: 225 10% 10%;
+    --secondary-foreground: 220 8% 82%;
+    --muted: 225 8% 14%;
+    --muted-foreground: 220 8% 50%;
+    --accent: 220 10% 75%;
+    --accent-foreground: 225 15% 4%;
+    --destructive: 0 65% 42%;
+    --destructive-foreground: 220 8% 96%;
+    --border: 225 8% 12%;
+    --input: 225 10% 8%;
+    --ring: 220 10% 75%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    background-attachment: fixed;
+  }
+
+  /* Premium serif headings */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-optical-sizing: auto;
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+
+  /* Monospace for data */
+  code, pre, .mono, .tabular-nums {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Premium selection */
+  ::selection {
+    background: hsla(220, 10%, 75%, 0.3);
+    color: hsl(220, 8%, 96%);
+  }
+}
+
+/* Animated gradient border */
+@property --angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rotate-gradient {
+  to {
+    --angle: 360deg;
+  }
+}
+
+.gradient-border {
+  position: relative;
+  background: hsl(var(--card));
+  border-radius: var(--radius);
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: calc(var(--radius) + 1px);
+  background: conic-gradient(
+    from var(--angle),
+    transparent 40%,
+    hsl(220, 10%, 80%) 50%,
+    transparent 60%
+  );
+  animation: rotate-gradient 8s linear infinite;
+  z-index: -1;
+  opacity: 0.5;
+}
+
+.gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* Noise texture overlay */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.025;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Dramatic glow effects */
+.glow-gold {
+  box-shadow: 
+    0 0 20px hsla(220, 10%, 75%, 0.15),
+    0 0 60px hsla(220, 10%, 75%, 0.1),
+    inset 0 1px 0 hsla(220, 20%, 95%, 0.1);
+}
+
+.glow-gold-intense {
+  box-shadow: 
+    0 0 30px hsla(220, 10%, 80%, 0.25),
+    0 0 80px hsla(220, 10%, 75%, 0.15),
+    0 0 120px hsla(220, 10%, 70%, 0.1),
+    inset 0 1px 0 hsla(220, 20%, 95%, 0.15);
+}
+
+.text-glow {
+  text-shadow: 0 0 40px hsla(220, 10%, 80%, 0.5);
+}
+
+/* Cinematic text gradient */
+.text-gradient-gold {
+  background: linear-gradient(
+    135deg,
+    hsl(220, 15%, 95%) 0%,
+    hsl(220, 10%, 75%) 50%,
+    hsl(220, 8%, 55%) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass morphism */
+.glass {
+  background: hsla(220, 15%, 8%, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid hsla(220, 10%, 20%, 0.5);
+}
+
+.glass-gold {
+  background: hsla(220, 15%, 10%, 0.6);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid hsla(220, 10%, 75%, 0.2);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsla(220, 10%, 30%, 0.5);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsla(220, 10%, 60%, 0.5);
+}
+
+/* Focus states */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Button interactions */
+.btn-premium {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-premium::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    hsla(45, 100%, 80%, 0.2) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.btn-premium:hover::before {
+  opacity: 1;
+}
+
+.btn-premium:active {
+  transform: scale(0.98);
+}
+
+/* Dramatic line decorations */
+.line-glow {
+  position: relative;
+}
+
+.line-glow::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(220, 10%, 75%),
+    transparent
+  );
+  opacity: 0.5;
+}
+
+/* Animated underline */
+.underline-animate {
+  position: relative;
+  display: inline-block;
+}
+
+.underline-animate::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: hsl(var(--primary));
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.underline-animate:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Stagger animation utilities */
+.stagger-1 { animation-delay: 0ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 200ms; }
+.stagger-4 { animation-delay: 300ms; }
+.stagger-5 { animation-delay: 400ms; }
+.stagger-6 { animation-delay: 500ms; }
+
+/* Breathing animation */
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.animate-breathe {
+  animation: breathe 4s ease-in-out infinite;
+}
+
+/* Float animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Pulse ring */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 1; }
+  50% { transform: scale(1.05); opacity: 0.5; }
+  100% { transform: scale(0.95); opacity: 1; }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 3s ease-in-out infinite;
+}
+
+/* Shimmer effect */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsla(220, 10%, 75%, 0.1) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Typography utilities */
+.text-balance {
+  text-wrap: balance;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Grid pattern background */
+.bg-grid {
+  background-image: 
+    linear-gradient(hsla(220, 10%, 50%, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, hsla(220, 10%, 50%, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Radial gradient utilities */
+.bg-radial-gold {
+  background: radial-gradient(
+    ellipse 50% 50% at 50% 50%,
+    hsla(220, 10%, 75%, 0.15) 0%,
+    transparent 70%
+  );
+}
+
+.bg-radial-top {
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 0%,
+    hsla(220, 10%, 75%, 0.1) 0%,
+    transparent 60%
+  );
+}

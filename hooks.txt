@@ -1,0 +1,956 @@
+Set Up Local Environment
+Before writing the hook let's first have a local environment properly configured e.g. deploying pool manager, utility routers and test tokens.
+
+At the end of this guide a development environment will be set up to be used to build the rest of the examples in the Guides section of the docs.
+
+To get started as quickly as possible for building Uniswap v4 hooks, there is a Quick Start section below to clone a boilerplate and get building. To start from scratch and learn the underlying concepts, jump to the Start from Scratch section.
+
+Quick Start
+The Uniswap v4-template repo provides a basic foundry environment with required imports already pre-loaded. Click on Use this template to create a new repository with it.
+
+Or simply clone it and install the dependencies:
+
+git clone https://github.com/uniswapfoundation/v4-template.git
+cd v4-template
+# requires foundry
+forge install
+forge test
+
+Then hop to the Local Node via Anvil to complete the set up and start developing.
+
+Start from Scratch
+In the following sections, let's walk through the steps to create the same environment set up as the boilerplate from scratch and learn the underlying concepts.
+
+Setting up Foundry
+First thing is to set up a new Foundry project.
+
+If there is no Foundry installed - follow the Foundry Book for installation.
+
+Once Foundry is setup, initialize a new project:
+
+forge init counter-hook
+cd counter-hook
+
+Then install the Uniswap v4-core and v4-periphery contracts as dependencies:
+
+forge install Uniswap/v4-core && forge install Uniswap/v4-periphery
+
+Next, set up the remappings so that the shorthand syntax for importing contracts from the dependencies work nicely:
+
+forge remappings > remappings.txt
+
+If there is something wrong with the inferred remappings, please replace with the following in remappings.txt:
+
+@uniswap/v4-core/=lib/v4-core/
+forge-gas-snapshot/=lib/v4-core/lib/forge-gas-snapshot/src/
+forge-std/=lib/v4-core/lib/forge-std/src/
+permit2/=lib/v4-periphery/lib/permit2/
+solmate/=lib/v4-core/lib/solmate/
+v4-core/=lib/v4-core/
+v4-periphery/=lib/v4-periphery/
+
+After that, remove the default Counter contract and its associated test and script file that Foundry initially set up. To do that, either manually delete those files, or just run the following:
+
+rm ./**/Counter*.sol
+
+Finally, since v4 uses transient storage which is only available after Ethereum's cancun hard fork and on Solidity versions >= 0.8.24 - some config must be set in foundry.toml config file.
+
+To do that, add the following lines to foundry.toml:
+
+# foundry.toml
+
+solc_version = "0.8.26"
+evm_version = "cancun"
+ffi = true
+
+Awesome! Now it's all set to start building the hook! Let’s run a quick test to confirm everything is set up properly.
+
+Compile a Basic Hook Contract
+To confirm that the environment is configured correctly let's write a basic Counter Hook contract. Create a new file, ./src/CounterHook.sol and paste the following code into it:
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+
+contract CounterHook is BaseHook {
+    using PoolIdLibrary for PoolKey;
+
+    // NOTE: ---------------------------------------------------------
+    // state variables should typically be unique to a pool
+    // a single hook contract should be able to service multiple pools
+    // ---------------------------------------------------------------
+
+    mapping(PoolId => uint256 count) public beforeSwapCount;
+    mapping(PoolId => uint256 count) public afterSwapCount;
+
+    mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
+    mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
+
+    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: true,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: true,
+            afterRemoveLiquidity: false,
+            beforeSwap: true,
+            afterSwap: true,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    // -----------------------------------------------
+    // NOTE: see IHooks.sol for function documentation
+    // -----------------------------------------------
+
+    function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        beforeSwapCount[key.toId()]++;
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    function _afterSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
+        internal
+        override
+        returns (bytes4, int128)
+    {
+        afterSwapCount[key.toId()]++;
+        return (BaseHook.afterSwap.selector, 0);
+    }
+
+    function _beforeAddLiquidity(
+        address,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) internal override returns (bytes4) {
+        beforeAddLiquidityCount[key.toId()]++;
+        return BaseHook.beforeAddLiquidity.selector;
+    }
+
+    function _beforeRemoveLiquidity(
+        address,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) internal override returns (bytes4) {
+        beforeRemoveLiquidityCount[key.toId()]++;
+        return BaseHook.beforeRemoveLiquidity.selector;
+    }
+}
+
+
+To compile the Counter Hook contracts in the ./src folder, use the foundry build command:
+
+forge build
+
+If the environment is compiled correctly it will display a message:
+
+Compiler run successful!
+
+Local Node via Anvil
+Other than writing unit tests, Anvil can be used to deploy and test hooks.
+
+With the local node up and running, use the --rpc-url 127.0.0.1:8545 flag in tests to point the Foundry testing suite to that local node:
+
+# start anvil, a local EVM chain
+anvil
+
+# in a new terminal
+# foundry script for deploying v4 & hooks to anvil
+forge script script/Anvil.s.sol \
+    --rpc-url http://localhost:8545 \
+    --private-key <test_wallet_private_key> \
+    --broadcast
+
+# test on the anvil local node
+forge test --rpc-url 127.0.0.1:8545
+
+Next Steps
+With the environment set up ready to be built on. Jump over to the guides section to learn about the Uniswap functions that can be integrated with Hook. Remember to add all contracts (.sol files) to the ./src folder and their subsequent tests to the ./test folder. Then test them against the local anvil node by running:
+
+forge test --rpc-url 127.0.0.1:8545
+
+Appendix: OpenZeppelin Hooks Library
+OpenZeppelin Hooks Library, included in v4-template, provides secure and modular reference implementations for Uniswap v4 Hooks!
+
+If you're starting from scratch, you can install the OpenZeppelin Hooks library:
+
+$ forge install OpenZeppelin/uniswap-hooks
+
+The library includes:
+
+BaseHook: Core scaffolding with security checks and permission management
+BaseCustomAccounting: For implementing hook-owned liquidity and custom token accounting
+BaseCustomCurve: For replacing default concentrated liquidity math with custom swap logic
+BaseAsyncSwap: For implementing non-atomic and asynchronous swaps
+BaseDynamicFee: For implementing dynamic fee pools
+BaseOverrideFee: For implementing dynamic fees on every swap
+BaseDynamicAfterFee: For implementing post-swap fee adjustments based on actual swap output
+Previous
+Swap
+Next
+
+
+Swap Hooks
+Swaps are the most common interaction with the Uniswap protocol. When it comes to swap there are two hook functions available to customize and extend its behavior:
+
+beforeSwap
+afterSwap
+As the names suggest beforeSwap/afterSwap are functions called before or after a swap is executed on a pool.
+
+This guide will go through the parameters for beforeSwap and afterSwap, and a simple example of a swap hook.
+
+Note: The swap hook is not production ready code, and is implemented in a simplistic manner for the purpose of learning.
+
+Set Up the Contract
+Declare the solidity version used to compile the contract, here we will use >=0.8.24 for the solidity version as transient storage is used.
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+Import the relevant dependencies from v4-core and v4-periphery:
+
+import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+
+Create a contract called SwapHook, use PoolIdLibrary to attach functions of computing poolId for PoolKey. Declare two mappings as counters for beforeSwap and afterSwap.
+
+contract SwapHook is BaseHook {
+    using PoolIdLibrary for PoolKey;
+
+    // NOTE: ---------------------------------------------------------
+    // state variables should typically be unique to a pool
+    // a single hook contract should be able to service multiple pools
+    // ---------------------------------------------------------------
+
+    mapping(PoolId => uint256 count) public beforeSwapCount;
+    mapping(PoolId => uint256 count) public afterSwapCount;
+
+    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+
+Override getHookPermissions() from BaseHook to return a struct of permissions to signal which hook functions are to be implemented. It will also be used at deployment to validate the hook address correctly represents the expected permissions.
+
+function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+    return Hooks.Permissions({
+        beforeInitialize: false,
+        afterInitialize: false,
+        beforeAddLiquidity: false,
+        afterAddLiquidity: false,
+        beforeRemoveLiquidity: false,
+        afterRemoveLiquidity: false,
+        beforeSwap: true,
+        afterSwap: true,
+        beforeDonate: false,
+        afterDonate: false,
+        beforeSwapReturnDelta: false,
+        afterSwapReturnDelta: false,
+        afterAddLiquidityReturnDelta: false,
+        afterRemoveLiquidityReturnDelta: false
+    });
+}
+
+beforeSwap
+Here the example shows that every time before a swap is executed in a pool, beforeSwapCount for that pool will be incremented by one.
+
+function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
+    internal
+    override
+    returns (bytes4, BeforeSwapDelta, uint24)
+{
+    beforeSwapCount[key.toId()]++;
+    return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+}
+
+beforeSwap Parameters
+When triggering the beforeSwap hook function, there are some parameters we can make use of to customize or extend the behavior of swap. These parameters are described in beforeSwap from IHooks.
+
+A brief overview of the parameters:
+
+sender The initial msg.sender for the PoolManager.swap call - typically a swap router
+key The key for the pool
+params The parameters for the swap i.e. SwapParams from IPoolManager
+hookData Arbitrary data handed into the PoolManager by the swapper to be passed on to the hook
+afterSwap
+Similiar as above, every time after a swap is executed in a pool, afterSwapCount for that pool will be incremented by one.
+
+function _afterSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
+    internal
+    override
+    returns (bytes4, int128)
+{
+    afterSwapCount[key.toId()]++;
+    return (BaseHook.afterSwap.selector, 0);
+}
+
+afterSwap Parameters
+When triggering the afterSwap hook function, there are some parameters we can make use of to customize or extend the behavior of swap. These parameters are described in afterSwap from IHooks.
+
+A brief overview of the parameters:
+
+sender The initial msg.sender for the PoolManager.swap call - typically a swap router
+key The key for the pool
+params The parameters for the swap i.e. SwapParams from IPoolManager
+delta The amount owed to the caller (positive) or owed to the pool (negative)
+hookData Arbitrary data handed into the PoolManager by the swapper to be passed on to the hook
+A Complete Swap Hook Contract
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+
+contract SwapHook is BaseHook {
+    using PoolIdLibrary for PoolKey;
+
+    // NOTE: ---------------------------------------------------------
+    // state variables should typically be unique to a pool
+    // a single hook contract should be able to service multiple pools
+    // ---------------------------------------------------------------
+
+    mapping(PoolId => uint256 count) public beforeSwapCount;
+    mapping(PoolId => uint256 count) public afterSwapCount;
+
+    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: true,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: true,
+            afterRemoveLiquidity: false,
+            beforeSwap: true,
+            afterSwap: true,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    // -----------------------------------------------
+    // NOTE: see IHooks.sol for function documentation
+    // -----------------------------------------------
+
+    function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, bytes calldata)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        beforeSwapCount[key.toId()]++;
+        return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO_DELTA, 0);
+    }
+
+    function _afterSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata, BalanceDelta, bytes calldata)
+        internal
+        override
+        returns (bytes4, int128)
+    {
+        afterSwapCount[key.toId()]++;
+        return (BaseHook.afterSwap.selector, 0);
+    }
+}
+
+Liquidity Hooks
+This guide will walk through on an example of adding and removing liquidity. There are four hook functions available to customize and extend these behavior:
+
+beforeAddLiquidity
+afterAddLiquidity
+beforeRemoveLiquidity
+afterRemoveLiquidity
+As the names suggest beforeAddLiquidity/afterAddLiquidity are functions called before or after liquidity is added to a pool. Similarly beforeRemoveLiquidity/afterRemoveLiquidity are functions called before or after liquidity is removed from a pool.
+
+This guide will go through the parameters and examples specifically for beforeAddLiquidity and beforeRemoveLiquidity.
+
+Note: The liquidity examples are not production ready code, and are implemented in a simplistic manner for the purpose of learning.
+
+Set Up the Contract
+Declare the solidity version used to compile the contract, since transient storage is used the solidity version will be >=0.8.24.
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+Import the relevant dependencies from v4-core and v4-periphery:
+
+import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+
+Create a contract called LiquidityHook, use PoolIdLibrary to attach functions of computing ID of a pool to PoolKey. Declare two mappings to act as counters when calling beforeAddLiquidity and beforeRemoveLiquidity.
+
+contract LiquidityHook is BaseHook {
+    using PoolIdLibrary for PoolKey;
+
+    // NOTE: ---------------------------------------------------------
+    // state variables should typically be unique to a pool
+    // a single hook contract should be able to service multiple pools
+    // ---------------------------------------------------------------
+
+    mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
+    mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
+
+    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+
+Override getHookPermissions from BaseHook.sol to return a struct of permissions to signal which hook functions are to be implemented. It will also be used at deployment to validate the address correctly represents the expected permissions.
+
+function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+    return Hooks.Permissions({
+        beforeInitialize: false,
+        afterInitialize: false,
+        beforeAddLiquidity: true,
+        afterAddLiquidity: false,
+        beforeRemoveLiquidity: true,
+        afterRemoveLiquidity: false,
+        beforeSwap: false,
+        afterSwap: false,
+        beforeDonate: false,
+        afterDonate: false,
+        beforeAddLiquidityReturnDelta: false,
+        afterSwapReturnDelta: false,
+        afterAddLiquidityReturnDelta: false,
+        afterRemoveLiquidityReturnDelta: false
+    });
+}
+
+beforeAddLiquidity
+Here the example shows that every time before liquidity is added to a pool, beforeAddLiquidityCount for that pool will be incremented by one.
+
+function _beforeAddLiquidity(
+    address,
+    PoolKey calldata key,
+    IPoolManager.ModifyLiquidityParams calldata,
+    bytes calldata
+) internal override returns (bytes4) {
+    beforeAddLiquidityCount[key.toId()]++;
+    return BaseHook.beforeAddLiquidity.selector;
+}
+
+beforeAddLiquidity Parameters
+When triggering the beforeAddLiquidity hook function, there are some parameters we can make use of to customize or extend the behavior of modifyLiquidity. These parameters are described in beforeAddLiquidity from IHooks.sol.
+
+A brief overview of the parameters:
+
+sender The initial msg.sender for the add liquidity call
+key The key for the pool
+params The parameters for adding liquidity i.e. ModifyLiquidityParams from IPoolManager.sol
+hookData Arbitrary data handed into the PoolManager by the liquidity provider to be be passed on to the hook
+beforeRemoveLiquidity
+Similiar as above, every time before liquidity is removed from a pool, beforeRemoveLiquidityCount for that pool will be incremented by one.
+
+function _beforeRemoveLiquidity(
+    address,
+    PoolKey calldata key,
+    IPoolManager.ModifyLiquidityParams calldata,
+    bytes calldata
+) internal override returns (bytes4) {
+    beforeRemoveLiquidityCount[key.toId()]++;
+    return BaseHook.beforeRemoveLiquidity.selector;
+}
+
+beforeRemoveLiquidity Parameters
+When triggering the beforeRemoveLiquidity hook function, there are some parameters we can make use of to customize or extend the behavior of modifyLiquidity. These parameters are described in beforeRemoveLiquidity from IHooks.sol.
+
+A brief overview of the parameters:
+
+sender The initial msg.sender for the remove liquidity call
+key The key for the pool
+params The parameters for removing liquidity i.e. ModifyLiquidityParams from IPoolManager.sol
+hookData Arbitrary data handed into the PoolManager by the liquidity provider to be be passed on to the hook
+A Complete Liquidity Hook Contract
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+
+import {Hooks} from "v4-core/src/libraries/Hooks.sol";
+import {IPoolManager} from "v4-core/src/interfaces/IPoolManager.sol";
+import {PoolKey} from "v4-core/src/types/PoolKey.sol";
+import {PoolId, PoolIdLibrary} from "v4-core/src/types/PoolId.sol";
+import {BalanceDelta} from "v4-core/src/types/BalanceDelta.sol";
+import {BeforeSwapDelta, BeforeSwapDeltaLibrary} from "v4-core/src/types/BeforeSwapDelta.sol";
+
+contract LiquidityHook is BaseHook {
+    using PoolIdLibrary for PoolKey;
+
+    // NOTE: ---------------------------------------------------------
+    // state variables should typically be unique to a pool
+    // a single hook contract should be able to service multiple pools
+    // ---------------------------------------------------------------
+
+    mapping(PoolId => uint256 count) public beforeAddLiquidityCount;
+    mapping(PoolId => uint256 count) public beforeRemoveLiquidityCount;
+
+    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+
+    function getHookPermissions() public pure override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: true,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: true,
+            afterRemoveLiquidity: false,
+            beforeSwap: false,
+            afterSwap: false,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeAddLiquidityReturnDelta: false,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    // -----------------------------------------------
+    // NOTE: see IHooks.sol for function documentation
+    // -----------------------------------------------
+
+    function _beforeAddLiquidity(
+        address,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) internal override returns (bytes4) {
+        beforeAddLiquidityCount[key.toId()]++;
+        return BaseHook.beforeAddLiquidity.selector;
+    }
+
+    function _beforeRemoveLiquidity(
+        address,
+        PoolKey calldata key,
+        IPoolManager.ModifyLiquidityParams calldata,
+        bytes calldata
+    ) internal override returns (bytes4) {
+        beforeRemoveLiquidityCount[key.toId()]++;
+        return BaseHook.beforeRemoveLiquidity.selector;
+    }
+}
+
+AsyncSwap Hooks
+One feature enabled by custom accounting is​​​​‌ AsyncSwap swap. This feature allows hook developers to replace the v4 (v3-style) swap logic.
+
+This means developers can replace Uniswap's internal core logic for how to handle swaps. Two emergent use-cases are possible with custom accounting:
+
+Asynchronous swaps and swap-ordering. Delay the v4 swap logic for fulfillment at a later time.
+Custom Curves. Replace the v4 swap logic with different swap logic. The custom logic is flexible and developers can implement symmetric curves, asymmetric curves, or custom quoting.
+AsyncSwap is typically described as taking the full input to replace the internal swap logic, partially taking the input is better described as custom accounting
+
+Note: The flexibility of AsyncSwap means hook developers can implement harmful behavior (such as taking all swap amounts for themselves, charging extra fees, etc.). Hooks with AsyncSwap behavior should be examined very closely by both developers and users.
+
+Configure a AsyncSwap Hook
+To enable AsyncSwap, developers will need the hook permission BEFORE_SWAP_RETURNS_DELTA_FLAG
+
+import {BaseHook} from "v4-periphery/src/utils/BaseHook.sol";
+// ...
+
+contract AsyncSwapHook is BaseHook {
+    // ...
+
+    function getHookPermissions() public pure virtual override returns (Hooks.Permissions memory) {
+        return Hooks.Permissions({
+            beforeInitialize: false,
+            afterInitialize: false,
+            beforeAddLiquidity: false,
+            afterAddLiquidity: false,
+            beforeRemoveLiquidity: false,
+            afterRemoveLiquidity: false,
+            beforeSwap: false,
+            afterSwap: true,
+            beforeDonate: false,
+            afterDonate: false,
+            beforeSwapReturnDelta: true,
+            afterSwapReturnDelta: false,
+            afterAddLiquidityReturnDelta: false,
+            afterRemoveLiquidityReturnDelta: false
+        });
+    }
+
+    // ...
+}
+
+beforeSwap
+AsyncSwap only works on exact-input swaps and the beforeSwap must take the input currency and return BeforeSwapDelta. The hook should IPoolManager.mint itself the corresponding tokens equal to the amount of the input (amountSpecified). It should then return a BeforeSwapDelta where deltaSpecified = -amountSpecified (the positive amount).
+
+The funds' movements are as follows:
+
+User initiates a swap, specifying -100 tokenA as input
+The hook's beforeSwap takes 100 tokenA for itself, and returns a value of 100 to PoolManager.
+The PoolManager accounts the 100 tokens against the swap input, leaving 0 tokens remaining
+The PoolManager does not execute swap logic, as there are no tokens left to swap
+The PoolManager transfers the delta from the hook to the swap router, in step 2 the hook created a debt (that must be paid)
+The swap router pays off the debt using the user's tokens
+contract AsyncSwapHook is BaseHook {
+     // ...
+
+    function _beforeSwap(address, PoolKey calldata key, IPoolManager.SwapParams calldata params, bytes calldata)
+        internal
+        override
+        returns (bytes4, BeforeSwapDelta, uint24)
+    {
+        // AsyncSwap only works on exact-input swaps
+        if (params.amountSpecified < 0) {
+            // take the input token so that v3-swap is skipped...
+            Currency input = params.zeroForOne ? key.currency0 : key.currency1;
+            uint256 amountTaken = uint256(-params.amountSpecified);
+            poolManager.mint(address(this), input.toId(), amountTaken);
+
+            // to AsyncSwap the exact input, we return the amount that's taken by the hook
+            return (BaseHook.beforeSwap.selector, toBeforeSwapDelta(amountTaken.toInt128(), 0), 0);
+        }
+        else {
+            return (BaseHook.beforeSwap.selector, BeforeSwapDeltaLibrary.ZERO, 0);
+        }
+
+    }
+}
+
+Testing
+To verify the AsyncSwap behaved properly, developers should test the swap and that token balances match expected behavior.
+
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
+
+import "forge-std/Test.sol";
+import {Deployers} from "v4-core/test/utils/Deployers.sol";
+// ...
+
+contract AsyncSwapTest is Test, Deployers {
+    // ...
+
+    function setUp() public {
+        // ... 
+    }
+
+    function test_asyncSwap() public {
+        assertEq(hook.beforeSwapCount(poolId), 0);
+
+        uint256 balance0Before = currency0.balanceOfSelf();
+        uint256 balance1Before = currency1.balanceOfSelf();
+
+        // Perform a test swap //
+        int256 amount = -1e18;
+        bool zeroForOne = true;
+        BalanceDelta swapDelta = swap(poolKey, zeroForOne, amount, ZERO_BYTES);
+        // ------------------- //
+
+        uint256 balance0After = currency0.balanceOfSelf();
+        uint256 balance1After = currency1.balanceOfSelf();
+
+        // user paid token0
+        assertEq(balance0Before - balance0After, 1e18);
+
+        // user did not recieve token1 (AsyncSwap)
+        assertEq(balance1Before, balance1After);
+    }
+}
+
+1. Understanding Hook Risk in v4
+Uniswap v4 introduces hooks, comprised of arbitrary smart contract logic that executes at critical lifecycle points such as swaps, liquidity changes, and donations. Hooks dramatically expand what can be built on top of the AMM: programmable fees, custom curves, lending integrations, dynamic risk controls, and more.
+
+But with this flexibility comes a new category of security risks that differ materially from both previous Uniswap versions and traditional DeFi contract architectures. Hooks sit inside the core swap execution pipeline; incorrect assumptions or unsafe patterns can compromise pool integrity, price trades incorrectly, or expose liquidity providers to losses.
+
+This section summarizes the major classes of risk that commonly arise in hook development. Understanding these patterns early helps teams design safer mechanisms, write better tests, and scope appropriate audits.
+
+How Hook Risk Emerges
+Hook risk tends to arise through several common patterns. Understanding these early in the design process helps teams apply the correct mitigations.
+
+Accounting & Token Handling Failures
+Hooks that touch balances or modify deltas must handle accounting with extreme precision, rounding in the correct direction to prevent losses. Small errors can cascade into large systemic failures. Key risks include:
+
+Incorrect delta handling: Computing input/output amounts incorrectly, failing to validate internal balance changes, or relying on stale deltas between callbacks.
+ERC20 behavioral assumptions: Many tokens deviate from the “standard”: fee-on-transfer tokens, rebasing tokens, ERC-777 hooks, or pausable/ freezable tokens. These can silently break accounting, introduce reentrancy, or cause unexpected DoS behavior.
+Holding or rehypothecating assets: When a hook holds liquidity itself or deposits assets into another protocol, rounding errors and token-return inconsistencies multiply quickly.
+info
+Although the well-known Bunni and Balancer incidents were not specifically related to v4 infrastructure, they illustrate the types of accounting drift and asset-handling mistakes that hook developers must proactively guard against.
+
+External Calls, Reentrancy, and State Drift
+Any external call made during beforeSwap, afterSwap, or liquidity callbacks reopens the entire execution environment. This invalidates assumptions about atomicity and order. Teams must test and reason about:
+
+Reentrancy into the same pool: Nested callbacks can overwrite internal state or read partially updated values.
+Reentrancy into other pools using the same hook: Shared storage and shared assumptions may break unexpectedly.
+External protocol state drift: Prices, balances, positions, or interest rates can change between callbacks, even within the same transaction.
+Liquidity migration between callbacks: External calls can add/remove liquidity, making earlier snapshots invalid.
+info
+Core principle: If your hook calls external contracts, assume every piece of state may change before the callback sequence completes. Only explicit tests can validate safety here.
+
+Mathematical Correctness & Precision Risks
+Non-standard math is one of the most frequent sources of severe DeFi exploits. Hooks may define custom curves, implement TWAMM-style flows, modify fees dynamically, or use fixed-point operations. Common failure modes include:
+
+Precision drift & rounding instability: Small rounding errors can accumulate into large pricing deviations or accounting imbalances.
+Input-range or domain violations: Division by zero, negative ratios, overflow, or taking a root/log outside a valid domain.
+Fixed-point arithmetic instability: Exponentiation, logarithms, fractional powers, or operations that mix Q96/Q128 formats can amplify tiny numeric errors.
+Invariant discontinuities: Piecewise or hybrid curves may contain abrupt jumps that allow manipulation or revert paths.
+Non-invertible or inconsistent state updates: When multiple variables must update atomically, math that isn’t perfectly reversible can de-synchronize the system.
+Cumulative drift in iterative flows: TWAMM and streaming-swap mechanisms can diverge over time unless precision is tightly controlled.
+Because these issues often emerge only under adversarial flow or large TVL, a math-specialist review is strongly recommended for any hook performing non-trivial computation.
+
+External Dependency Failures
+Hooks that rely on oracles, lending protocols, LSTs, bridges, sequencers, or cross-chain systems inherit all of those systems’ risks.
+
+Key risks include:
+
+stale or manipulated oracle prices
+reverts or delays in external contracts
+liquidity, collateral, or rate changes mid-swap
+cross-chain messages arriving late, out of order, or not at all
+External dependencies dramatically expand the failure surface and require more thorough scenario testing.
+
+Upgradeability Hazards
+Upgradeability offers flexibility but also introduces major risks because hooks sit directly in the swap execution path. Many real-world exploits stem not from logic bugs, but from unsafe upgrade paths, compromised keys, or storage layout mistakes. Teams should avoid upgradeability unless it is truly required.
+
+When Upgradeability Might Be Justified:
+
+Early-stage or experimental hooks that may need rapid iteration
+Strategies requiring periodic parameter or logic updates
+Deployments spanning many pools where migration costs are high
+Even in these cases, strict controls are necessary.
+
+Recommended Practices:
+
+Prefer immutability when possible; it eliminates large classes of governance and operational risk.
+Use standard proxy patterns (e.g., OpenZeppelin UUPS/Transparent) rather than custom mechanisms.
+Restrict upgrade permissions to a multisig or timelock. Never use EOAs.
+Validate storage layout during every upgrade to prevent slot collisions or state corruption.
+Test upgrades thoroughly, including invariant tests and simulations of swap flows and callback ordering.
+Publish an upgrade policy detailing how upgrades are announced, reviewed, and executed.
+Versioning Instead of Upgrading:
+
+When safety is higher priority than convenience:
+
+Deploy new hook contracts (v1 —> v2) rather than upgrading old ones.
+Allow pools to migrate voluntarily rather than forcing an upgrade path.
+Autonomous Behavior or Parameter Updates
+Hooks that modify parameters automatically, fees, risk buffers, curve weights, target liquidity ranges, must enforce strict guardrails:
+
+bounded rate of change
+explicit time/state gating
+monotonicity constraints where relevant
+complete off-chain observability
+Autonomous updates are a major source of emergent behavior and must be tested as adversarially as possible.
+
+Price Impacting Behavior and Dynamic Fees
+Hooks that modify swap prices, adjust fees dynamically, or override deltas directly can extract value from traders or LPs if designed poorly.
+
+Dynamic fee risks include:
+
+Fees can be raised selectively after seeing a user’s trade, extracting value from them.
+Fee changes may behave non-linearly, causing small swaps to create unexpectedly large costs.
+Reentrancy or liquidity splitting can be used to manipulate how the fee is calculated.
+Poorly designed fee logic can open new, unintentional MEV-style vectors.
+Because fee logic interacts deeply with swap math, these hooks must model worst-case adversarial flows, not just average behavior.
+
+TVL Growth Over Time
+A hook’s risk profile is not static. As liquidity grows, even small design flaws can become catastrophic. Teams must reassess:
+
+monitoring requirements
+audit depth
+bug bounty scope
+formal verification needs
+emergency procedures
+whenever TVL materially increases. More info on these topics to evaluate can be found in Generic Hook Risk Tiers & Recommendations.
+
+Flash Accounting and Transient State Risks
+PoolManager accumulates deltas between callbacks. Hooks relying on this transient state must ensure that adversaries cannot manipulate deltas mid-execution.
+
+Incorrect assumptions about transient state can lead to:
+
+unbalanced inputs and outputs
+bypassing fee logic
+value-extraction opportunities
+pricing swaps incorrectly
+This is a hook-specific risk vector not present in previous Uniswap versions and deserves explicit design attention.
+
+BeforeSwapDelta and NoOp Override Risks
+Hooks can alter swap execution by returning BeforeSwapDelta values. This is an extremely powerful capability that can unintentionally introduce value-extraction paths or unbalanced token flows. Any hook exercising these permissions must be reasoned about carefully and tested extensively.
+
+Returning a BeforeSwapDelta that fully consumes the user’s input (or fully satisfies exact-output) means the PoolManager sees zero remaining amount, causing the Uniswap CL math to be skipped. Such cases are referred to as NoOp swaps, the hook effectively bypasses the pool and executes the entire trade on its own.
+
+Hooks that routinely create NoOp swaps are essentially implementing custom trading logic or custom curves.
+Custom-curve hooks must be extremely careful with input/output math and internal accounting, since any precision or balance error directly results in mispriced trades.
+Real-world example: the Bunni exploit involved a Uniswap v4 liquidity hook with custom curve/distribution logic that contained accounting flaws and was exploited.
+Permission Encoding & Salt Grinding Pitfalls
+Hooks in Uniswap v4 rely on a hashed permission system: the PoolManager derives a permission bitmap from the hook’s address and uses it to determine which callbacks (e.g., before/after swap, add liquidity, remove liquidity) are allowed. In practice this means the hook’s deployed address effectively encodes its permissions.
+
+If a CREATE2 salt is computed incorrectly when mining the hook address:
+
+required callbacks may be disabled
+undesired permissions may be unintentionally enabled
+the hook’s attack surface may expand unexpectedly
+Teams must compute and verify the expected permission bitmap in their deployment pipeline.
+
+Token-Type Specific Hazards
+Hook assumptions may break for non-standard tokens such as:
+
+Fee-on-transfer tokens
+Rebasing or elastic-supply tokens
+ERC-777 tokens with hooks
+Tokens with pausability, freezing, or blacklisting capabilities
+Tokens with unconventional decimals
+info
+These behaviors can break accounting guarantees or introduce reentrancy risk.
+
+Multi-Pool and Routing Interactions
+Hooks may be invoked multiple times in the same transaction during routing. Developers should test:
+
+sequential fee logic behavior
+whether state assumptions hold across hops
+whether autonomy or dynamic fees behave consistently
+the possibility of multi-hop induced value leakage
+This is a unique surface area for hooks in real aggregator routing conditions.
+
+Cross-Chain State & Synchronization Risks
+Cross-chain-aware hooks face risks that do not exist in single-chain designs. Any state imported from another chain (prices, parameters, governance settings, or risk signals) always arrives with delay, may be out of order, or temporarily unavailable. Treating this data as fresh or authoritative can lead to incorrect assumptions about liquidity, pricing, or safety constraints.
+
+Because chains differ in finality, block time, and security, cross-chain messages can be delayed, replayed, dropped, or delivered multiple times. Hooks that assume synchronized or atomic state across chains risk malfunction under real network conditions.
+
+To remain safe, cross-chain hooks should incorporate:
+
+Conservative guardrails: Reject stale, extreme, or unexpected updates and enforce safe parameter bounds.
+Idempotent update logic: Ensure repeated or out-of-order messages do not corrupt state or create inconsistent transitions.
+Graceful degradation: Safety-critical behavior should constrain itself when remote data is missing or diverging, rather than relying on optimistic assumptions.
+Off-chain observability: Operators must detect when remote state lags, diverges, or produces suspicious sequences.
+Adversarial assumptions: Treat the origin chain as manipulable prior to message finality and design around worst-case ordering and timing.
+info
+Core message: Cross-chain hooks must assume latency, inconsistency, and adversarial ordering as the normal case, not exceptions. Designing for these realities ensures hooks remain robust even when cross-chain communication behaves unpredictably.
+
+2. Hook Risk Self-Scoring Dimensions
+The risk framework assigns a score across nine dimensions. Together, these describe the hook’s complexity, potential failure surface, systemic impact, and team preparedness.
+
+These dimensions align with a Uniswap Hooks Security Worksheet (both tools work seamlessly together).
+
+Teams should score themselves on these 9 dimensions and evaluate each dimension honestly and conservatively. Slight underestimation can lead to insufficient audits or missed safety processes
+
+Risk Dimensions
+note
+Higher means more risk
+
+Complexity (0 to 5)
+Measures total code complexity including branching logic, number of callbacks, configuration patterns, and multi-step flows. Hooks with multiple operational modes or advanced features are inherently more difficult to reason about.
+
+Custom math (0 to 5)
+Includes any math that deviates from standard constant-product AMM operations, such as custom bonding curves, dynamic fee formulas, TWAMM or streaming-swap math, non-integer exponents, logarithmic or exponential functions, composite pricing functions, weighted or piecewise curves, or multi-variable state transformations.
+
+These forms of math introduce risks including rounding drift, input-range violations, discontinuities, and invariant instability. Even small numerical errors can accumulate and create mispricing, de-synchronization of balances, or execution failure. Custom math is one of the most common sources of high-severity DeFi exploits.
+
+External dependencies (0 to 3)
+Dependencies include oracles, lending markets, LST systems, bridges, cross chain flows, and off chain data sources. This increases the number of assumptions that can fail.
+
+External liquidity exposure (0 to 3)
+Hooks may move tokens to external protocols, hold their own liquidity, or participate in lending flows. The more externalized the liquidity, the higher the risk.
+
+TVL potential (0 to 5)
+Liquidity can grow after launch. Hooks intended for farms or incentivized pools should assume higher potential TVL and treat themselves accordingly.
+
+Suggested Scoring Brackets
+
+0: <$100K (experimental or personal project)
+1: $100K–$1M
+2: $1M–$5M
+3: $5M–$15M
+4: $15M–$50M, mid-size protocol integration, or incentives
+5: $50M+, major protocol integration, or significant incentives
+Team maturity (0 to 3)
+Experts with multiple production deployments and prior audits score low risk. New or anonymous teams score higher. Team maturity directly affects incident readiness and code quality.
+
+Suggested Scoring Brackets
+0: Highly Mature Team has shipped audited production deployments or UUPS upgrades across 2+ distinct codebases, operates a mature DevOps pipeline, maintains an active incident-response process, and has demonstrated responsibility in past disclosures or upgrades.
+1: Experienced Team has shipped at least one audited production deployment or upgrade, with some operational experience in handling deployments, upgrades, or maintenance, but has less breadth across multiple codebases or ecosystems.
+2: Moderately experienced Team has deployed contracts to production previously but without demonstrable operational maturity. Processes for upgrades, monitoring, and incident response may be informal or ad hoc.
+3: Unproven team has no prior production deployments, or deployments lacked audits and operational rigor. Team is new, anonymous, or lacks a public track record demonstrating secure coding and responsible operations.
+Upgradeability (0 to 3)
+Upgradeable hooks are more flexible but dangerous. Admin controls and proxy patterns introduce room for storage layout issues, logic upgrade errors, and governance attacks.
+
+Autonomous parameter updates (0 to 3)
+If a hook adjusts its own configuration automatically or based on internal state, risk increases. Autonomy amplifies misconfiguration and emergent behavior risks.
+
+Price impacting behavior (0 to 3)
+Hooks that directly influence the swap path, effective price, routing decisions, or fee structure must be treated with particular caution.
+
+3. Generic Hook Risk Tiers and Recommendations
+Risk tiers provide a baseline set of recommendations depending on the total risk score from the previous scoring phase, but are not sufficient on their own. Certain features introduce specific risk categories that require mandatory safeguards regardless of total score. Each risk tier is expected to have extensive unit and fuzz test coverage.
+
+note
+Specific features require additional steps defined in the next section
+
+Low Risk (0 to 6)
+Relatively small surface area, little or no math, no external interactions.
+
+Minimum recommendations:
+
+One full audit, plus AI static analysis tools
+No math specialist required
+Bug bounty optional
+Monitoring optional unless TVL grows significantly (see high risk hooks section for more details on monitoring)
+Medium Risk (7 to 17)
+Moderate complexity, custom logic, or meaningful dependencies.
+
+Minimum recommendations:
+
+One full audit, plus AI static analysis tools
+Optional second audit for math or complex components
+Bug bounty recommended
+Monitoring recommended if external dependencies exist (see high risk hooks section for more details on monitoring)
+Autonomy or parameter updates may require additional test coverage
+High Risk (18 to 33)
+Complex math, external liquidity, autonomous behavior, upgradeability, price impact, or large TVL.
+
+Minimum recommendations:
+
+Two formal audits including one by a math specialist
+Mandatory bug bounty
+Extended test suite recommended including invariants and stateful fuzzing (e.g., delta conservation, fee bounds, no unintended reentrancy, monotonicity of curve functions)
+Mandatory monitoring with anomaly detection. At this tier, monitoring should aim not only to detect exploits early, but to identify silent failure modes where math or accounting begins drifting from expected behavior. Suggested monitoring targets include:
+Liquidity imbalances
+Delta accounting anomalies
+Sudden dynamic fee spikes
+Gas per swap outliers
+Divergence between expected vs. actual deltas
+Unusually high revert rates
+Abnormal slippage patterns under small trade sizes
+Deviations between theoretical curve output vs. on-chain execution
+Drift in time-weighted or iterative math outputs (TWAMM, etc.)
+Optional formal verification to help validate:
+Invariant preservation (balance conservation, fee bounds)
+Arithmetic bounds (overflow, domain violations, rounding expectations)
+Reentrancy and callback-ordering assumptions
+Correctness of composite math (TWAMM, curves, weighting, volatility models)
