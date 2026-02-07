@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import express from "express";
+import cors from "cors";
 import { IExecDataProtector } from "@iexec/dataprotector";
 import { IExec } from "iexec";
 import { Wallet, JsonRpcProvider, verifyMessage, getBytes } from "ethers";
@@ -12,6 +14,7 @@ import {
   keccak256,
   parseAbi,
   toBytes,
+  recoverMessageAddress,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -984,4 +987,143 @@ if (shouldCheckTeeSigner) {
 }
 
 await tick();
+
+// --- HTTP Server for serving matches ---
+const app = express();
+const port = process.env.PORT || 8080;
+
+app.use(cors());
+app.use(express.json());
+
+const privateAuthTtlSeconds = Math.max(
+  60,
+  Number(getEnv("PRIVATE_MATCHES_TTL_SECONDS", "VITE_PRIVATE_MATCHES_TTL_SECONDS") || 60 * 60 * 24 * 7)
+);
+
+function normalizeLower(value) {
+  return typeof value === "string" ? value.toLowerCase() : value;
+}
+
+function isValidAddress(addr) {
+  return typeof addr === "string" && /^0x[a-fA-F0-9]{40}$/.test(addr);
+}
+
+function isFreshTimestamp(timestamp, ttlSeconds) {
+  if (!Number.isFinite(timestamp)) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return Math.abs(now - timestamp) <= ttlSeconds;
+}
+
+async function verifyPrivateAuth({ address, signature, timestamp, ttl }) {
+  const addr = Array.isArray(address) ? address[0] : address;
+  if (!isValidAddress(addr)) return false;
+  const sig = Array.isArray(signature) ? signature[0] : signature;
+  if (typeof sig !== "string" || !sig.startsWith("0x")) return false;
+  if (!isFreshTimestamp(timestamp, ttl)) return false;
+  const message = `shadowpool:matches:${addr}:${timestamp}`;
+  try {
+    const recovered = await recoverMessageAddress({ message, signature: sig });
+    return normalizeLower(recovered) === normalizeLower(addr);
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeMatchesPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const matches = Array.isArray(payload.matches) ? payload.matches : [];
+  return {
+    roundId: typeof payload.roundId === "string" ? payload.roundId : undefined,
+    merkleRoot: typeof payload.merkleRoot === "string" ? payload.merkleRoot : undefined,
+    roundExpiry: typeof payload.roundExpiry === "number" ? payload.roundExpiry : undefined,
+    generatedAt: typeof payload.generatedAt === "string" ? payload.generatedAt : undefined,
+    matchesCount: matches.length,
+    matches: [],
+  };
+}
+
+app.get("/api/rounds/:roundId/matches*", async (req, res) => {
+  const { roundId } = req.params;
+  const isPrivate = req.path.includes("/private");
+
+  if (!/^0x[a-fA-F0-9]{64}$/.test(roundId)) {
+    return res.status(400).json({ error: "Invalid roundId" });
+  }
+
+  const filePath = path.resolve(relayerMatchesDir, `${roundId}.json`);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "Matches not found" });
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch {
+    return res.status(500).json({ error: "Invalid matches payload" });
+  }
+
+  if (isPrivate) {
+    const address = req.headers["x-shadowpool-address"];
+    const signature = req.headers["x-shadowpool-signature"];
+    const timestampHeader = req.headers["x-shadowpool-timestamp"];
+    const timestamp = Number(Array.isArray(timestampHeader) ? timestampHeader[0] : timestampHeader);
+
+    const ok = await verifyPrivateAuth({ address, signature, timestamp, ttl: privateAuthTtlSeconds });
+    if (!ok) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const matches = Array.isArray(payload.matches) ? payload.matches : [];
+    const addrLower = normalizeLower(Array.isArray(address) ? address[0] : address);
+    const filtered = matches.filter(
+      (m) =>
+        m &&
+        typeof m === "object" &&
+        normalizeLower(m.trader) === addrLower
+    );
+
+    return res.json({
+      roundId: payload.roundId ?? roundId,
+      merkleRoot: payload.merkleRoot,
+      roundExpiry: payload.roundExpiry,
+      generatedAt: payload.generatedAt,
+      matchesCount: filtered.length,
+      matches: filtered,
+    });
+  }
+
+  const sanitized = sanitizeMatchesPayload(payload);
+  if (!sanitized) {
+    return res.status(500).json({ error: "Invalid matches payload" });
+  }
+  res.json(sanitized);
+});
+
+// Fallback for direct file access if needed (optional)
+app.get("/relayer/:roundId.json", (req, res) => {
+  const { roundId } = req.params;
+  const filePath = path.resolve(relayerMatchesDir, `${roundId}.json`);
+  if (fs.existsSync(filePath)) {
+     // NOTE: We should probably sanitize this too if we want to be strict,
+     // but the legacy fallback might expect full content. 
+     // For safety, let's reuse the public sanitation logic or just not expose it 
+     // if it's not needed. The code I wrote earlier used it as fallback.
+     // But strictly speaking, public users shouldn't see private matches.
+     // So let's sanitize it.
+     try {
+        const payload = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        const sanitized = sanitizeMatchesPayload(payload);
+        res.json(sanitized);
+     } catch {
+        res.status(500).json({ error: "Error reading file" });
+     }
+  } else {
+    res.status(404).json({ error: "Not found" });
+  }
+});
+
+app.listen(port, () => {
+  log(`HTTP server listening on port ${port}`);
+});
+
 setInterval(tick, pollIntervalSeconds * 1000);
