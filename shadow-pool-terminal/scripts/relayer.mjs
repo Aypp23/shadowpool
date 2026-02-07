@@ -1042,7 +1042,7 @@ function sanitizeMatchesPayload(payload) {
   };
 }
 
-app.get("/api/rounds/:roundId/matches*", async (req, res) => {
+app.get(["/api/rounds/:roundId/matches", "/api/rounds/:roundId/matches/private"], async (req, res) => {
   const { roundId } = req.params;
   const isPrivate = req.path.includes("/private");
 
