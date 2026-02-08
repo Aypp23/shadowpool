@@ -33,7 +33,7 @@ Practical implication for ShadowPool:
 
 The canonical config lives in:
 
-- `/Users/aomine/Desktop/iexec2/.env`
+- `.env`
 
 ## What “Pool Initialized” Means
 
@@ -63,12 +63,12 @@ For reliable demos (low surprise):
 ## Add Liquidity (Script)
 
 Use:
-- `/Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/add-liquidity.mjs`
+- `shadow-pool-terminal/scripts/add-liquidity.mjs`
 
 Example:
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 node scripts/add-liquidity.mjs --tick-lower=-120 --tick-upper=120
 ```
 
@@ -81,12 +81,12 @@ Supported flags (common):
 
 How it resolves addresses:
 
-- Reads `/Users/aomine/Desktop/iexec2/.env` for `VITE_*` addresses.
+- Reads `.env` for `VITE_*` addresses.
 - If some addresses are missing, it attempts to read the latest Foundry broadcast file:
   - `shadowpool-hook/broadcast/DeployShadowPool.s.sol/421614/run-latest.json`
 
 Requirements:
-- `/Users/aomine/Desktop/iexec2/.env` includes `PRIVATE_KEY` and all `VITE_*` addresses
+- `.env` includes `PRIVATE_KEY` and all `VITE_*` addresses
 - the deployer has TokenA/TokenB balances
 - ticks align to `VITE_POOL_TICK_SPACING`
 
@@ -157,8 +157,5 @@ In v4, you cannot re-initialize an existing pool. A fresh deployment is the clea
 ## Reference Scripts (Known-Good)
 
 See:
-- `/Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/add-liquidity.mjs`
-- `/Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/redeploy-shadowpool.mjs`
-- `/Users/aomine/Desktop/iexec2/v4-template/script/01_CreatePoolAndAddLiquidity.s.sol`
-- `/Users/aomine/Desktop/iexec2/v4-template/script/02_AddLiquidity.s.sol`
-- `/Users/aomine/Desktop/iexec2/v4-template/script/03_Swap.s.sol`
+- `shadow-pool-terminal/scripts/add-liquidity.mjs`
+- `shadow-pool-terminal/scripts/redeploy-shadowpool.mjs`
