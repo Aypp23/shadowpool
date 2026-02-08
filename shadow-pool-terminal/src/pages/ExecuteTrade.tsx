@@ -16,14 +16,14 @@ import { useStore } from '@/stores/useStore';
 import { Match, HookData, ExecutionResult } from '@/lib/types';
 // import { HookDataInspector } from '@/components/common/HookDataInspector';
 import { Confetti } from '@/components/common/Confetti';
-import { fetchRelayerMatches, generateHookData } from '@/services/shadowPool';
+import { fetchRelayerMatches, generateHookData, executeTradeWithProof } from '@/services/shadowPool';
 import { truncateAddress } from '@/lib/utils';
 import { isPublicViewer } from '@/lib/privacy';
 import { toast } from 'sonner';
 
 export default function ExecuteTrade() {
   const [searchParams] = useSearchParams();
-  const { wallet, rounds, matches, updateMatch, updateRound, addAdminAction, connectWallet, upsertMatches } = useStore();
+  const { wallet, rounds, matches, updateMatch, updateRound, connectWallet, upsertMatches } = useStore();
   const isPublicView = isPublicViewer(wallet);
   const viewerAddress = wallet.address?.toLowerCase() ?? null;
   const [executableMatches, setExecutableMatches] = useState<Match[]>([]);
@@ -172,12 +172,31 @@ export default function ExecuteTrade() {
       return;
     }
 
-    setExecutionResult({
-      success: false,
-      error: 'coming_soon',
-      message: 'This feature is coming soon.',
-    });
-    toast.message('This feature is coming soon.');
+    setIsExecuting(true);
+    setExecutionResult(null);
+    try {
+      const result = await executeTradeWithProof(hookData);
+      setExecutionResult(result);
+      if (result.success) {
+        setShowConfetti(true);
+        toast.success('Trade executed successfully!');
+        if (selectedMatch) {
+          updateMatch(selectedMatch.id, {
+            executed: true,
+            executedAt: new Date(),
+            executionTxHash: result.txHash,
+          });
+        }
+      } else if (isExecutionFailure(result)) {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Execution failed';
+      setExecutionResult({ success: false, error: 'execution_failed', message: msg });
+      toast.error(msg);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   if (!wallet.connected) {
@@ -217,10 +236,6 @@ export default function ExecuteTrade() {
     return null;
   })();
   const isHookDataAligned = !hookDataMismatchReason;
-  const isComingSoon =
-    executionResult !== null &&
-    isExecutionFailure(executionResult) &&
-    executionResult.error === 'coming_soon';
 
   return (
     <div className="container py-8 md:py-12">
@@ -442,9 +457,7 @@ export default function ExecuteTrade() {
                     className={`p-4 rounded-lg border ${
                       executionResult.success
                         ? 'bg-green-500/10 border-green-500/20'
-                        : isComingSoon
-                          ? 'bg-primary/5 border-primary/20'
-                          : 'bg-destructive/10 border-destructive/20'
+                        : 'bg-destructive/10 border-destructive/20'
                     }`}
                   >
                     {executionResult.success ? (
@@ -470,17 +483,10 @@ export default function ExecuteTrade() {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {isComingSoon ? (
-                          <div className="flex items-center gap-2 text-primary font-medium">
-                            <Clock className="w-5 h-5" />
-                            Coming Soon
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 text-destructive font-medium">
-                            <XCircle className="w-5 h-5" />
-                            Execution Failed
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 text-destructive font-medium">
+                          <XCircle className="w-5 h-5" />
+                          Execution Failed
+                        </div>
                         <p className="text-sm text-muted-foreground">
                           {'message' in executionResult ? executionResult.message : 'An error occurred'}
                         </p>

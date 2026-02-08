@@ -115,7 +115,7 @@ export interface HookData {
 // Execution Result Types
 export type ExecutionResult = 
   | { success: true; txHash: string; amountOut: string }
-  | { success: false; error: 'invalid_proof' | 'expired' | 'already_executed' | 'insufficient_liquidity' | 'coming_soon' | 'unknown' | 'token_error' | 'invalid_swap_params' | 'hook_mismatch' | 'execution_failed'; message: string };
+  | { success: false; error: 'invalid_proof' | 'expired' | 'already_executed' | 'insufficient_liquidity' | 'insufficient_balance' | 'unauthorized_caller' | 'invalid_signature' | 'coming_soon' | 'unknown' | 'token_error' | 'invalid_swap_params' | 'hook_mismatch' | 'execution_failed'; message: string };
 
 // Admin Action Types
 export interface AdminAction {

@@ -1680,7 +1680,7 @@ export async function executeTradeWithProof(hookData: HookData): Promise<Executi
     'function decimals() view returns (uint8)',
   ]);
 
-  const [balanceBefore, decimals] = await Promise.all([
+  const [balanceBefore, decimalsOut, tokenInBalance, decimalsIn] = await Promise.all([
     publicClient.readContract({
       address: tokenOut,
       abi: erc20Abi,
@@ -1688,25 +1688,53 @@ export async function executeTradeWithProof(hookData: HookData): Promise<Executi
       args: [account],
     }),
     publicClient.readContract({ address: tokenOut, abi: erc20Abi, functionName: 'decimals' }),
+    publicClient.readContract({
+      address: tokenIn,
+      abi: erc20Abi,
+      functionName: 'balanceOf',
+      args: [account],
+    }),
+    publicClient.readContract({ address: tokenIn, abi: erc20Abi, functionName: 'decimals' }),
   ]);
 
-  const currentAllowance = await publicClient.readContract({
+  if ((tokenInBalance as bigint) < amountIn) {
+    const have = formatUnits(tokenInBalance as bigint, Number(decimalsIn));
+    const need = formatUnits(amountIn, Number(decimalsIn));
+    return {
+      success: false,
+      error: 'insufficient_balance',
+      message: `Insufficient token balance. Need ${need}, have ${have}.`,
+    };
+  }
+
+  let currentAllowance: bigint = 0n;
+  currentAllowance = (await publicClient.readContract({
     address: tokenIn,
     abi: erc20Abi,
     functionName: 'allowance',
     args: [account, swapRouterAddress],
-  });
+  })) as bigint;
 
-  if ((currentAllowance as bigint) < amountIn) {
-    const { request: approveRequest } = await publicClient.simulateContract({
-      address: tokenIn,
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [swapRouterAddress, amountIn],
-      account,
-    });
-    const approveHash = await walletClient.writeContract(approveRequest);
-    await publicClient.waitForTransactionReceipt({ hash: approveHash });
+  if (currentAllowance < amountIn) {
+    try {
+      const { request: approveRequest } = await publicClient.simulateContract({
+        address: tokenIn,
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [swapRouterAddress, amountIn],
+        account,
+      });
+      const approveHash = await walletClient.writeContract(approveRequest);
+      await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      currentAllowance = amountIn;
+    } catch (err) {
+      const baseMsg = formatRpcError(err);
+      const normalized = baseMsg.toLowerCase();
+      if (normalized.includes('user rejected') || normalized.includes('user rejected the request')) {
+        return { success: false, error: 'token_error', message: 'Token approval was rejected in your wallet.' };
+      }
+      return { success: false, error: 'token_error', message: `Token approval failed. ${baseMsg}` };
+    }
   }
 
   const fee = getPoolFee();
@@ -1786,8 +1814,8 @@ export async function executeTradeWithProof(hookData: HookData): Promise<Executi
       const expectedOut = zeroForOne ? amount1 : amount0;
       const expectedOutAbs = expectedOut < 0n ? -expectedOut : expectedOut;
       if (expectedOutAbs < minAmountOut) {
-        const formattedOut = formatUnits(expectedOutAbs, Number(decimals));
-        const formattedMin = formatUnits(minAmountOut, Number(decimals));
+        const formattedOut = formatUnits(expectedOutAbs, Number(decimalsOut));
+        const formattedMin = formatUnits(minAmountOut, Number(decimalsOut));
         return {
           success: false,
           error: 'insufficient_liquidity',
@@ -1839,13 +1867,31 @@ export async function executeTradeWithProof(hookData: HookData): Promise<Executi
     return {
       success: true,
       txHash,
-      amountOut: formatUnits(rawOut, Number(decimals)),
+      amountOut: formatUnits(rawOut, Number(decimalsOut)),
     };
   } catch (err) {
     console.error('[ShadowPool] swap failed', err);
     const maybeData =
       (err as { data?: unknown; cause?: { data?: unknown } })?.cause?.data ??
       (err as { data?: unknown }).data;
+    if (
+      maybeData &&
+      typeof maybeData === 'object' &&
+      'errorName' in maybeData &&
+      (maybeData as { errorName?: unknown }).errorName === 'Panic'
+    ) {
+      const code = (maybeData as { args?: unknown[] }).args?.[0];
+      if (code === 17n) {
+        const have = formatUnits(tokenInBalance as bigint, Number(decimalsIn));
+        const need = formatUnits(amountIn, Number(decimalsIn));
+        const allowanceFmt = formatUnits(currentAllowance, Number(decimalsIn));
+        return {
+          success: false,
+          error: 'token_error',
+          message: `Token transfer failed (likely missing approval). Need ${need}, balance ${have}, allowance ${allowanceFmt}.`,
+        };
+      }
+    }
     let hookErrorName: string | null = null;
     let decodedDetail = '';
     if (typeof maybeData === 'string' && maybeData.startsWith('0x')) {
@@ -1911,10 +1957,10 @@ export async function executeTradeWithProof(hookData: HookData): Promise<Executi
     const msg = [baseMsg, decodedDetail].filter(Boolean).join(' | ');
     const normalized = msg.toLowerCase();
     if (normalized.includes('insufficient funds') || normalized.includes('insufficient balance')) {
-      return { success: false, error: 'insufficient_liquidity', message: 'Insufficient balance to execute this swap.' };
+      return { success: false, error: 'token_error', message: 'Insufficient funds to execute this swap.' };
     }
     if (normalized.includes('user rejected') || normalized.includes('user rejected the request')) {
-      return { success: false, error: 'invalid_proof', message: 'Transaction was rejected in your wallet.' };
+      return { success: false, error: 'token_error', message: 'Transaction was rejected in your wallet.' };
     }
     if (normalized.includes('invalidproof')) {
       return { success: false, error: 'invalid_proof', message: 'Invalid merkle proof.' };
