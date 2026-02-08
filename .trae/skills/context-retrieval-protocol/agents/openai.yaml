@@ -1,4 +1,0 @@
-interface:
-  display_name: "Context Retrieval Protocol"
-  short_description: "Retrieve guide/context/hooks before work"
-  default_prompt: "Use $context-retrieval-protocol to load guide.txt, context.txt, and hooks.txt before implementing changes."
