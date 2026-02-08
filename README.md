@@ -11,7 +11,7 @@ The system leverages Trusted Execution Environments (TEEs) to match orders off-c
 *   **Dark Liquidity**: Orders are encrypted client-side and only decrypted inside a secure TEE enclave. No one (not even the Relayer) sees the order details until they are matched.
 *   **MEV Protection**: By hiding order details from the mempool, ShadowPool eliminates the surface area for predatory MEV strategies.
 *   **Trustless Settlement**: Matched trades are settled on Uniswap v4. The `ShadowPoolHook` contract ensures that only trades authorized by the TEE (proven via cryptographic signatures and Merkle proofs) can execute.
-*   **Batched Execution**: Orders are collected in "rounds" and matched in batches, improving efficiency and privacy.
+*   **Batched Execution**: Orders are collected in "rounds" and matched in batches using **iExec Bulk Processing**. This allows up to 100 encrypted orders to be processed in a single TEE task, significantly reducing gas costs and computation overhead per trade.
 *   **Compliance & Privacy**: Supports optional viewing keys and regulatory hooks without compromising the core privacy guarantees for general trading.
 
 ---
@@ -22,7 +22,7 @@ The ShadowPool ecosystem consists of three main components working in unison:
 
 1.  **ShadowPool Terminal (Frontend & Relayer)**:
     *   **Frontend**: A Next.js trading interface where users sign "Intents" (orders).
-    *   **Relayer**: A Node.js service that aggregates encrypted intents, triggers TEE tasks, and submits settlement transactions to the blockchain.
+    *   **Relayer**: A Node.js service that aggregates encrypted intents into **Bulk Requests**, triggers TEE tasks via iExec, and submits settlement transactions to the blockchain.
     
 2.  **ShadowPool iApp (TEE Worker)**:
     *   A secure JavaScript application running inside an iExec TEE worker.
@@ -120,7 +120,7 @@ POOL_KEY=...                    # Uniswap Pool Key
 
 ### Phase 2: Execution (TEE)
 1.  **Aggregation**: The Relayer collects intents for the current `roundId`.
-2.  **Task Trigger**: The Relayer triggers an iExec task, passing the encrypted intents as input files.
+2.  **Task Trigger (Bulk)**: The Relayer triggers an iExec task using **`processBulkRequest`**. This aggregates multiple encrypted intents (datasets) into a single computational unit, maximizing throughput.
 3.  **Secure Matching**:
     *   The TEE worker starts, retrieves the decryption key securely.
     *   `app.js` decrypts orders and runs the matching algorithm.
