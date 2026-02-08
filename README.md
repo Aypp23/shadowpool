@@ -161,7 +161,7 @@ POOL_KEY=...                    # Uniswap Pool Key
 *   Check that the `roundId` in the proof matches the currently active round.
 
 **Frontend: "Signature Denied"**
-*   The wallet must be on the correct network (Arbitrum Sepolia / Base Sepolia).
+*   The wallet must be on the correct network (Arbitrum Sepolia).
 *   Ensure you are signing the correct EIP-712 Typed Data structure.
 
 ---
