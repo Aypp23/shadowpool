@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: shadow-pool-relayer
+    rootDir: shadow-pool-terminal
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node scripts/relayer.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      - key: PORT
+        value: 10000
+      - key: RELAYER_MATCHES_DIR
+        value: /var/data/matches
+    disk:
+      name: matches-data
+      mountPath: /var/data
+      sizeGB: 1
