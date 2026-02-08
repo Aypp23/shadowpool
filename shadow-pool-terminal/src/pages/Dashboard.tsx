@@ -128,7 +128,9 @@ export default function Dashboard() {
   );
   const walletAddress = wallet.address?.toLowerCase() ?? null;
   const scopedIntents = walletAddress
-    ? intents.filter((i) => (i.trader ?? '').toLowerCase() === walletAddress)
+    ? intents
+        .filter((i) => (i.trader ?? '').toLowerCase() === walletAddress)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     : [];
   const userIntents = scopedIntents.slice(0, 5);
 

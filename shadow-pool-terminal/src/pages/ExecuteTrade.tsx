@@ -302,9 +302,8 @@ export default function ExecuteTrade() {
         </Card>
 
         {/* Hook Data Inspector */}
-        {(selectedMatch || hookData || isLoadingHookData) && (
+        {/* {(selectedMatch || hookData || isLoadingHookData) && (
           <>
-            {/* Divider */}
             <div className="h-px bg-white/[0.06]" />
             
             <motion.div
@@ -323,7 +322,7 @@ export default function ExecuteTrade() {
             ) : null}
           </motion.div>
           </>
-        )}
+        )} */}
 
         {/* Execution Panel */}
         {hookData && (
