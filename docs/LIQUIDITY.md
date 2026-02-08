@@ -23,12 +23,26 @@ If you initialize with one key and swap with another, you are swapping against a
 - “price limit exceeded”
 - output below `minAmountOut`
 
+Practical implication for ShadowPool:
+
+- Your environment must keep these values consistent across:
+  - deployment scripts
+  - liquidity scripts
+  - frontend execution
+  - relayer configuration
+
+The canonical config lives in:
+
+- `/Users/aomine/Desktop/iexec2/.env`
+
 ## What “Pool Initialized” Means
 
 The pool is “initialized” only if `slot0.sqrtPriceX96 != 0` for that pool key.
 
 Starting price for a 1:1 pool:
 - `sqrtPriceX96 = 2^96 = 79228162514264337593543950336`
+
+In demo environments, a clean reset usually means redeploying a fresh pool and initializing at 1:1 again.
 
 ## What “Liquidity” Means
 
@@ -37,6 +51,14 @@ Liquidity controls depth and price impact:
 - If **liquidity is zero**, swaps will fail or output will be ~0.
 - If **price moves far away**, strict minOut constraints become impossible (your protected “limit” can’t be satisfied).
 - If **liquidity is too concentrated** in a narrow range, small swaps can push the price out of range.
+
+## Recommended Demo Strategy
+
+For reliable demos (low surprise):
+
+- Start with a wide tick range around the current price (aligned to tick spacing).
+- Keep trade sizes small relative to liquidity until the execution path is stable.
+- If you push price too far (or see repeated minOut failures), redeploy and start fresh.
 
 ## Add Liquidity (Script)
 
@@ -50,6 +72,19 @@ cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
 node scripts/add-liquidity.mjs --tick-lower=-120 --tick-upper=120
 ```
 
+Supported flags (common):
+
+- `--tick-lower=<int>` (default: `-120`)
+- `--tick-upper=<int>` (default: `120`)
+- `--liquidity=<bigint>` (optional; exact liquidity amount)
+- `--max-liquidity=<bigint>` (default: `1e24`; caps computed liquidity)
+
+How it resolves addresses:
+
+- Reads `/Users/aomine/Desktop/iexec2/.env` for `VITE_*` addresses.
+- If some addresses are missing, it attempts to read the latest Foundry broadcast file:
+  - `shadowpool-hook/broadcast/DeployShadowPool.s.sol/421614/run-latest.json`
+
 Requirements:
 - `/Users/aomine/Desktop/iexec2/.env` includes `PRIVATE_KEY` and all `VITE_*` addresses
 - the deployer has TokenA/TokenB balances
@@ -58,6 +93,15 @@ Requirements:
 Recommended strategy:
 - For demos: start with a reasonably wide range (aligned to tick spacing).
 - If you see extreme price movement, redeploy and add broader liquidity before executing.
+
+## Sanity Checks Before You Execute a Match
+
+If execution is failing, validate these before chasing matching/root issues:
+
+- Pool key values match `.env`:
+  - `VITE_POOL_FEE`, `VITE_POOL_TICK_SPACING`, `VITE_SHADOWPOOL_HOOK_ADDRESS`, TokenA/TokenB addresses
+- Liquidity was added after the pool was initialized (for the same key).
+- Swap router and modify-liquidity router are from the same deployment (same manager).
 
 ## Common Errors and What They Mean
 
@@ -113,8 +157,8 @@ In v4, you cannot re-initialize an existing pool. A fresh deployment is the clea
 ## Reference Scripts (Known-Good)
 
 See:
-- `/Users/aomine/Desktop/iexec2/swap.txt`
+- `/Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/add-liquidity.mjs`
+- `/Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/redeploy-shadowpool.mjs`
 - `/Users/aomine/Desktop/iexec2/v4-template/script/01_CreatePoolAndAddLiquidity.s.sol`
 - `/Users/aomine/Desktop/iexec2/v4-template/script/02_AddLiquidity.s.sol`
 - `/Users/aomine/Desktop/iexec2/v4-template/script/03_Swap.s.sol`
-

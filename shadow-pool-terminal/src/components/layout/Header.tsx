@@ -132,14 +132,14 @@ export function Header() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-            className="relative w-11 h-11 rounded-xl overflow-hidden"
+            className="relative w-11 h-11 rounded-xl overflow-hidden bg-black/20"
           >
-            {/* Glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-400 via-primary to-amber-600 opacity-90" />
-            <div className="absolute inset-0 bg-gradient-to-t from-transparent via-transparent to-white/20" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="relative text-background font-serif font-bold text-xl">S</span>
-            </div>
+            <img
+              src="/brand/shadowpool-mark.png"
+              alt="ShadowPool"
+              className="absolute inset-0 h-full w-full object-cover"
+              draggable={false}
+            />
             {/* Ambient glow */}
             <div className="absolute -inset-1 bg-primary/30 blur-lg -z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
           </motion.div>
