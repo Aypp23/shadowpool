@@ -202,7 +202,7 @@ const iexecWorkerpool =
   FALLBACK_IEXEC_WORKERPOOL;
 const iexecWorkerpoolMaxPrice = Number(
   getEnv("VITE_IEXEC_WORKERPOOL_MAX_PRICE_NRLC", "IEXEC_WORKERPOOL_MAX_PRICE_NRLC") ||
-    "1000000000"
+    "100000000"
 );
 const relayerMatchesDir =
   getEnv("RELAYER_MATCHES_DIR") ||
@@ -343,8 +343,7 @@ async function ensureRequesterStake({ minStakeNrlc }) {
   const stakeBefore = asNrlcBigInt(before?.stake);
   if (stakeBefore >= minStake) return;
 
-  const buffer = 100_000_000n;
-  const toDeposit = minStake - stakeBefore + buffer;
+  const toDeposit = minStake - stakeBefore;
   log(`Depositing to iExec account stake nRLC=${toDeposit.toString()}`);
   await withRetries(
     "accountDeposit",
