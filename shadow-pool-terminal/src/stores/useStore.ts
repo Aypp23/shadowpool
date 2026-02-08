@@ -71,10 +71,13 @@ function normalizeLower(value: unknown): string | null {
 function syncExecutedIntentsFromMatches(intents: Intent[], matches: Match[]): Intent[] {
   const executedProtectedData = new Set<string>();
   const executedMatchIds = new Set<string>();
+  const executedMatchUids = new Set<string>();
   for (const m of matches) {
     if (!m.executed) continue;
     const matchId = normalizeLower(m.id);
     if (matchId) executedMatchIds.add(matchId);
+    const uid = normalizeLower((m as unknown as { uid?: unknown }).uid);
+    if (uid) executedMatchUids.add(uid);
     const pd = normalizeLower(m.traderProtectedDataAddress);
     if (pd) executedProtectedData.add(pd);
   }
@@ -86,7 +89,8 @@ function syncExecutedIntentsFromMatches(intents: Intent[], matches: Match[]): In
     const pd = normalizeLower(intent.protectedDataAddress);
     const matchId = normalizeLower(intent.matchId);
     const executed =
-      (pd && executedProtectedData.has(pd)) || (matchId && executedMatchIds.has(matchId));
+      (pd && executedProtectedData.has(pd)) ||
+      (matchId && (executedMatchIds.has(matchId) || executedMatchUids.has(matchId)));
     if (!executed) return intent;
     changed = true;
     return { ...intent, status: 'executed' as const };

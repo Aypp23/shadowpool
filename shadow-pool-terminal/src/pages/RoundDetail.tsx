@@ -16,7 +16,7 @@ import { Match, RoundIntentRef } from '@/lib/types';
 import { RoundTimeline } from '@/components/common/RoundTimeline';
 import { CountdownTimer } from '@/components/common/CountdownTimer';
 import { MerkleRootCard } from '@/components/common/MerkleRootCard';
-import { fetchRelayerMatches, getRoundIntents, postRoundRoot, runBatchRound } from '@/services/shadowPool';
+import { fetchRelayerMatches, getRoundIntents, postRoundRoot, runBatchRound, syncMatchesExecutedStatus } from '@/services/shadowPool';
 import { generateHexString, truncateAddress } from '@/lib/utils';
 import { toast } from 'sonner';
 import { isPublicViewer } from '@/lib/privacy';
@@ -91,8 +91,10 @@ export default function RoundDetail() {
       const relayed = await fetchRelayerMatches(round.id, { mode: isPublicView ? 'public' : 'private' });
       if (!active || !relayed) return;
       if (relayed.matches.length > 0) {
-        setRoundMatches(relayed.matches);
-        upsertMatches(relayed.matches);
+        const synced = await syncMatchesExecutedStatus(relayed.matches);
+        if (!active) return;
+        setRoundMatches(synced);
+        upsertMatches(synced);
       }
       const nowSeconds = Math.floor(Date.now() / 1000);
       const nextPhase =

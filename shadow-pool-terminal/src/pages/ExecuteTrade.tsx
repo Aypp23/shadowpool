@@ -16,14 +16,15 @@ import { useStore } from '@/stores/useStore';
 import { Match, HookData, ExecutionResult } from '@/lib/types';
 // import { HookDataInspector } from '@/components/common/HookDataInspector';
 import { Confetti } from '@/components/common/Confetti';
-import { fetchRelayerMatches, generateHookData, executeTradeWithProof } from '@/services/shadowPool';
+import { fetchRelayerMatches, generateHookData, executeTradeWithProof, syncMatchesExecutedStatus } from '@/services/shadowPool';
 import { truncateAddress } from '@/lib/utils';
 import { isPublicViewer } from '@/lib/privacy';
 import { toast } from 'sonner';
 
 export default function ExecuteTrade() {
   const [searchParams] = useSearchParams();
-  const { wallet, rounds, matches, updateMatch, updateRound, connectWallet, upsertMatches } = useStore();
+  const { wallet, rounds, matches, intents, updateIntent, updateMatch, updateRound, connectWallet, upsertMatches } =
+    useStore();
   const isPublicView = isPublicViewer(wallet);
   const viewerAddress = wallet.address?.toLowerCase() ?? null;
   const [executableMatches, setExecutableMatches] = useState<Match[]>([]);
@@ -100,7 +101,9 @@ export default function ExecuteTrade() {
         const relayed = await fetchRelayerMatches(round.id, { mode: 'private' });
         if (!active || !relayed) continue;
         if (relayed.matches.length > 0) {
-          upsertMatches(relayed.matches);
+          const synced = await syncMatchesExecutedStatus(relayed.matches);
+          if (!active) return;
+          upsertMatches(synced);
         }
         if (relayed.merkleRoot || typeof relayed.matchCount === 'number') {
           updateRound(round.id, {
@@ -185,8 +188,31 @@ export default function ExecuteTrade() {
             executedAt: new Date(),
             executionTxHash: result.txHash,
           });
+          if (selectedMatch.traderProtectedDataAddress) {
+            const pd = selectedMatch.traderProtectedDataAddress.toLowerCase();
+            for (const intent of intents) {
+              if ((intent.protectedDataAddress ?? '').toLowerCase() !== pd) continue;
+              if (intent.roundId && intent.roundId !== selectedMatch.roundId) continue;
+              if (intent.status === 'executed') continue;
+              updateIntent(intent.id, { status: 'executed' });
+            }
+          }
+          setSelectedMatch((prev) => (prev && prev.uid === selectedMatch.uid ? { ...prev, executed: true } : prev));
         }
       } else if (isExecutionFailure(result)) {
+        if (result.error === 'already_executed' && selectedMatch) {
+          updateMatch(selectedMatch.uid, { executed: true });
+          if (selectedMatch.traderProtectedDataAddress) {
+            const pd = selectedMatch.traderProtectedDataAddress.toLowerCase();
+            for (const intent of intents) {
+              if ((intent.protectedDataAddress ?? '').toLowerCase() !== pd) continue;
+              if (intent.roundId && intent.roundId !== selectedMatch.roundId) continue;
+              if (intent.status === 'executed') continue;
+              updateIntent(intent.id, { status: 'executed' });
+            }
+          }
+          setSelectedMatch((prev) => (prev && prev.uid === selectedMatch.uid ? { ...prev, executed: true } : prev));
+        }
         toast.error(result.message);
       }
     } catch (error) {

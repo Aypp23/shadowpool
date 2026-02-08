@@ -2477,6 +2477,10 @@ async function syncMatchesExecutionState(matches: Match[]): Promise<Match[]> {
   return next;
 }
 
+export async function syncMatchesExecutedStatus(matches: Match[]): Promise<Match[]> {
+  return await syncMatchesExecutionState(matches);
+}
+
 /**
  * Get matches for a round
  */
