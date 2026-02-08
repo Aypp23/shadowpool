@@ -16,7 +16,7 @@ import { useStore } from '@/stores/useStore';
 import { Match, HookData, ExecutionResult } from '@/lib/types';
 // import { HookDataInspector } from '@/components/common/HookDataInspector';
 import { Confetti } from '@/components/common/Confetti';
-import { fetchRelayerMatches, generateHookData, executeTradeWithProof } from '@/services/shadowPool';
+import { fetchRelayerMatches, generateHookData } from '@/services/shadowPool';
 import { truncateAddress } from '@/lib/utils';
 import { isPublicViewer } from '@/lib/privacy';
 import { toast } from 'sonner';
@@ -172,40 +172,12 @@ export default function ExecuteTrade() {
       return;
     }
 
-    setIsExecuting(true);
-    setExecutionResult(null);
-
-    try {
-      const result = await executeTradeWithProof(hookData);
-      setExecutionResult(result);
-      
-      if (result.success) {
-        setShowConfetti(true);
-        toast.success('Trade executed successfully!');
-        
-        if (selectedMatch) {
-          updateMatch(selectedMatch.id, { 
-            executed: true, 
-            executedAt: new Date(),
-            executionTxHash: result.txHash
-          });
-        }
-      } else {
-        const msg = 'message' in result ? result.message : 'Execution failed';
-        toast.error(msg);
-      }
-    } catch (error) {
-      console.error('Execution error:', error);
-      const msg = error instanceof Error ? error.message : 'Unknown execution error';
-      setExecutionResult({
-        success: false,
-        error: 'unknown',
-        message: msg
-      });
-      toast.error(msg);
-    } finally {
-      setIsExecuting(false);
-    }
+    setExecutionResult({
+      success: false,
+      error: 'coming_soon',
+      message: 'This feature is coming soon.',
+    });
+    toast.message('This feature is coming soon.');
   };
 
   if (!wallet.connected) {
