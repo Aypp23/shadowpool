@@ -6,11 +6,6 @@ This guide describes:
 - what a trader signs (and what they should not need to sign)
 - the practical checks that keep the system working
 
-Quick links:
-
-- Deployment: `/Users/aomine/Desktop/iexec2/docs/DEPLOYMENT.md`
-- Liquidity: `/Users/aomine/Desktop/iexec2/docs/LIQUIDITY.md`
-
 ## Roles
 
 ### Trader
