@@ -45,7 +45,7 @@ The most common failure mode is configuration drift (addresses or pool key misma
 
 Single source of truth for deployment + local dev:
 
-- `/Users/aomine/Desktop/iexec2/.env`
+- `.env`
 
 The frontend consumes `VITE_*` variables at build time. The relayer and server read from process env (and attempt to load `.env` from common locations).
 
@@ -96,7 +96,7 @@ Used for execution and/or liquidity provisioning scripts:
 Deploy hook + registries + demo routers/tokens:
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadowpool-hook
+cd shadowpool-hook
 forge script script/DeployShadowPool.s.sol:DeployShadowPoolScript \
   --rpc-url "$ARBITRUM_SEPOLIA_RPC_URL" \
   --private-key "$PRIVATE_KEY" \
@@ -109,17 +109,17 @@ Addresses are written to:
 
 Update your repo root env file:
 
-- `/Users/aomine/Desktop/iexec2/.env`
+- `.env`
 
 Then restart services:
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 npm run dev
 ```
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 npm run relayer
 ```
 
@@ -129,7 +129,7 @@ Execution depends on Uniswap v4 pool state. Even if matching/root posting is cor
 
 Use the Liquidity guide:
 
-- `/Users/aomine/Desktop/iexec2/docs/LIQUIDITY.md`
+- `docs/LIQUIDITY.md`
 
 ## Verify Deployment (Must Pass)
 
@@ -138,7 +138,7 @@ Use the Liquidity guide:
 Leaf signatures must match the hook’s configured signer.
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 node scripts/relayer.mjs --check-tee-signer
 ```
 
@@ -176,7 +176,7 @@ The frontend expects a matches API in production. Configure:
 Locally, you can serve the production build using:
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 npm run build
 npm run start
 ```
@@ -200,13 +200,13 @@ Uniswap v4 pools cannot be “re-initialized” to reset price. In demo environm
 
 Use the redeploy helper:
 
-- `/Users/aomine/Desktop/iexec2/shadow-pool-terminal/scripts/redeploy-shadowpool.mjs`
+- `shadow-pool-terminal/scripts/redeploy-shadowpool.mjs`
 
-It deploys a fresh environment and updates `/Users/aomine/Desktop/iexec2/.env`.
+It deploys a fresh environment and updates `.env`.
 
 Example:
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 node scripts/redeploy-shadowpool.mjs --tick-lower=-120 --tick-upper=120
 ```
