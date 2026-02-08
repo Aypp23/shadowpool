@@ -28,13 +28,13 @@ This guide describes:
 
 Prereqs:
 
-- `.env` configured at `/Users/aomine/Desktop/iexec2/.env`
+- `.env` configured at `.env`
 - pool initialized + liquidity added (see LIQUIDITY.md)
 
 Start frontend:
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 npm install
 npm run dev
 ```
@@ -42,14 +42,14 @@ npm run dev
 Start relayer (matching + root posting):
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 npm run relayer
 ```
 
 Optional: start the production-style API server (serves built UI + match APIs):
 
 ```bash
-cd /Users/aomine/Desktop/iexec2/shadow-pool-terminal
+cd shadow-pool-terminal
 npm run build
 npm run start
 ```
