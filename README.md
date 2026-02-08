@@ -1,49 +1,60 @@
-# ShadowPool
+# ShadowPool: Privacy-Preserving Dark Pool on Uniswap v4 & iExec TEE
 
-**Privacy-Preserving, Intent-Based Dark Pool on Uniswap v4**
+**ShadowPool** is a decentralized dark pool built on **Uniswap v4** hooks and **iExec Confidential Computing (TEE)**. It enables traders to submit limit orders without revealing their intentions to the public mempool, preventing MEV (Maximum Extractable Value), front-running, and sandwich attacks.
 
-ShadowPool is a decentralized trading system that allows traders to submit encrypted "intents" (limit orders) that are matched off-chain within a Trusted Execution Environment (TEE) powered by iExec. Matched orders are then executed on-chain via a Uniswap v4 Hook, ensuring privacy, fairness, and valid execution without revealing order details until the moment of settlement.
+The system leverages Trusted Execution Environments (TEEs) to match orders off-chain securely and settles matched trades on-chain via a specialized Uniswap v4 Hook that verifies execution proofs.
 
-## 🏗 Architecture
+---
 
-The system consists of three main components:
+## 🌟 Key Features
 
-1.  **ShadowPool Terminal (`shadow-pool-terminal`)**:
-    *   **Frontend**: A React/Vite DApp for traders to manage liquidity, create intents, and execute trades.
-    *   **Relayer**: A Node.js service that orchestrates rounds, triggers TEE matching, and posts results on-chain.
-    *   **API**: Serves match proofs to the frontend.
+*   **Dark Liquidity**: Orders are encrypted client-side and only decrypted inside a secure TEE enclave. No one (not even the Relayer) sees the order details until they are matched.
+*   **MEV Protection**: By hiding order details from the mempool, ShadowPool eliminates the surface area for predatory MEV strategies.
+*   **Trustless Settlement**: Matched trades are settled on Uniswap v4. The `ShadowPoolHook` contract ensures that only trades authorized by the TEE (proven via cryptographic signatures and Merkle proofs) can execute.
+*   **Batched Execution**: Orders are collected in "rounds" and matched in batches, improving efficiency and privacy.
+*   **Compliance & Privacy**: Supports optional viewing keys and regulatory hooks without compromising the core privacy guarantees for general trading.
 
-2.  **Smart Contracts (`shadowpool-hook`)**:
-    *   **`ShadowPoolHook`**: A Uniswap v4 Hook that gates swaps. It verifies that a swap matches a valid, TEE-signed order included in the current round's Merkle root.
-    *   **`IntentRegistry`**: Coordinates round schedules and tracks intent submission counts.
-    *   **`ShadowPoolRootRegistry`**: Stores the Merkle roots of valid matches posted by the relayer.
+---
 
-3.  **TEE Matcher (`shadowpool-iapp`)**:
-    *   An iExec application (Node.js) that runs inside a secure enclave (Scone/Gramine).
-    *   Decrypts user intents, performs order matching (sorting by price, matching overlaps), generates a Merkle tree, and signs the results with a TEE-specific key.
+## 🏗 System Architecture
+
+The ShadowPool ecosystem consists of three main components working in unison:
+
+1.  **ShadowPool Terminal (Frontend & Relayer)**:
+    *   **Frontend**: A Next.js trading interface where users sign "Intents" (orders).
+    *   **Relayer**: A Node.js service that aggregates encrypted intents, triggers TEE tasks, and submits settlement transactions to the blockchain.
+    
+2.  **ShadowPool iApp (TEE Worker)**:
+    *   A secure JavaScript application running inside an iExec TEE worker.
+    *   It receives encrypted orders, decrypts them, runs the matching engine (COW - Coincidence of Wants), and outputs a signed result containing the matches and a Merkle Root of the state.
+
+3.  **ShadowPool Contracts (On-Chain)**:
+    *   **`ShadowPoolHook.sol`**: The Uniswap v4 Hook that acts as the gatekeeper. It verifies that a swap transaction carries a valid proof authorized by the TEE.
+    *   **`RootRegistry.sol`**: Stores the Merkle Roots committed by the TEE for each round, acting as the on-chain source of truth.
 
 ---
 
 ## 📂 Repository Structure
 
 ```
-.
-├── shadow-pool-terminal/       # Frontend, Relayer, and Scripts
-│   ├── src/                    # React frontend code
-│   ├── scripts/                # Operational scripts (relayer, deploy, debug)
-│   ├── public/                 # Static assets
-│   └── vercel.json             # Deployment config
+├── shadowpool-hook/          # 🧠 Smart Contracts (Foundry)
+│   ├── src/
+│   │   ├── ShadowPoolHook.sol    # Core verification logic
+│   │   └── RootRegistry.sol      # Merkle root storage
+│   └── test/                 # Foundry tests
 │
-├── shadowpool-hook/            # Solidity Contracts (Foundry)
-│   ├── src/                    # Contract source code (Hook, Registries)
-│   ├── test/                   # Foundry tests
-│   └── script/                 # Deployment scripts
+├── shadowpool-iapp/          # 🛡️ TEE Application (iExec)
+│   ├── src/
+│   │   └── app.js            # Matching logic & signing
+│   ├── Dockerfile            # TEE container definition
+│   └── scone/                # SCONE conf (if applicable)
 │
-├── shadowpool-iapp/            # iExec TEE Application
-│   ├── src/                    # Matching logic (app.js)
-│   └── Dockerfile              # Container definition for TEE
-│
-└── docs/                       # Detailed documentation
+├── shadow-pool-terminal/     # 💻 Frontend & Relayer
+│   ├── src/                  # Next.js App
+│   └── scripts/              # Backend Scripts
+│       ├── relayer.mjs       # Main orchestration script
+│       ├── server.mjs        # API for serving proofs
+│       └── utils/            # Cryptographic helpers
 ```
 
 ---
@@ -52,125 +63,113 @@ The system consists of three main components:
 
 ### Prerequisites
 
-*   **Node.js** (v20+)
-*   **Foundry** (for contract work)
-*   **Docker** (for building the TEE app)
-*   **Arbitrum Sepolia** RPC URL
-*   **iExec RLC** (for the relayer to pay for TEE tasks)
-*   **ETH** (Arbitrum Sepolia) for gas
+*   **Node.js** (v18+) & **npm/yarn**
+*   **Foundry** (Forge/Cast) for smart contract development
+*   **Docker** (for building the TEE image)
+*   **iExec SDK** (installed globally or via project deps)
 
-### 1. Environment Setup
+### 1. Installation
 
-Create a `.env` file in the root directory (or `shadow-pool-terminal/`) with the following variables. See `env.example` if available.
+Clone the repository and install dependencies for all workspaces:
 
 ```bash
-# RPC Configuration
-ARBITRUM_SEPOLIA_RPC_URL="https://arb-sepolia.g.alchemy.com/v2/..."
-VITE_PUBLIC_RPC_URL="https://arb-sepolia.g.alchemy.com/v2/..."
+# Install root dependencies (if any)
+npm install
 
-# Relayer / Admin Wallet
-PRIVATE_KEY="0x..."               # Must have ETH and RLC
-VITE_ADMIN_ADDRESS="0x..."
+# Install Contract dependencies
+cd shadowpool-hook
+forge install
 
-# iExec Configuration
-VITE_IEXEC_APP_ADDRESS="0x..."    # Address of your deployed TEE app
-VITE_IEXEC_WORKERPOOL_ADDRESS="0xB967057a21dc6A66A29721d96b8Aa7454B7c383F" # Debug workerpool
-VITE_IEXEC_WORKERPOOL_MAX_PRICE_NRLC="100000000" # 0.1 RLC
+# Install Frontend/Relayer dependencies
+cd ../shadow-pool-terminal
+npm install
 
-# ShadowPool Contracts (Populated after deployment)
-VITE_INTENT_REGISTRY_ADDRESS="0x..."
-VITE_ROOT_REGISTRY_ADDRESS="0x..."
-VITE_SHADOWPOOL_HOOK_ADDRESS="0x..."
-VITE_TOKEN_A_ADDRESS="0x..."
-VITE_TOKEN_B_ADDRESS="0x..."
-
-# Relayer Settings
-POLL_INTERVAL_SECONDS="60"
-```
-
-### 2. Installation
-
-```bash
-cd shadow-pool-terminal
+# Install iApp dependencies
+cd ../shadowpool-iapp
 npm install
 ```
 
-### 3. Running Locally
+### 2. Environment Configuration
 
-**Start the Frontend:**
-```bash
-npm run dev
-# Opens at http://localhost:8080
-```
+Create a `.env` file in `shadow-pool-terminal` (see `.env.example`):
 
-**Start the Relayer:**
-```bash
-npm run relayer
-# Polls for rounds and executes TEE tasks
+```env
+# Blockchain Config
+RPC_URL=https://sepolia.arbitrum.io/rpc
+PRIVATE_KEY=0x...               # Relayer Wallet
+CHAIN_ID=421614
+
+# iExec Config
+IEXEC_APP_ADDRESS=0x...         # Deployed iApp address
+IEXEC_WORKERPOOL_ADDRESS=debug-workerpool-0
+
+# Contract Config
+HOOK_ADDRESS=0x...              # Deployed ShadowPoolHook
+ROOT_REGISTRY_ADDRESS=0x...     # Deployed RootRegistry
+POOL_KEY=...                    # Uniswap Pool Key
 ```
 
 ---
 
-## 🔄 The Trade Lifecycle
+## 🔄 Deep Dive: The Trade Lifecycle
 
-1.  **Submit Intent**:
-    *   Trader selects a pair (e.g., TokenA/TokenB) and direction (Buy/Sell).
-    *   Frontend encrypts the order data using iExec DataProtector.
-    *   Frontend grants access to the **Relayer** (to trigger the task) and the **TEE App** (to decrypt).
-    *   Intent hash is registered on-chain in `IntentRegistry`.
+### Phase 1: Intent Creation (Client)
+1.  **User signs an intent**: The trader defines parameters (Asset, Amount, Limit Price) on the frontend.
+2.  **Encryption**: The intent is encrypted using the iExec dataset encryption key (protecting it from the Relayer).
+3.  **Submission**: The encrypted intent is sent to the Relayer via API.
 
-2.  **Matching (TEE)**:
-    *   Relayer detects a new round window.
-    *   Relayer calls the iExec App (`shadowpool-iapp`).
-    *   **Inside TEE**:
-        *   Intents are decrypted and validated.
-        *   Matching engine pairs orders based on price/amount.
-        *   Merkle tree is constructed from valid matches.
-        *   Match leaves are signed by the TEE private key.
-    *   Result (Merkle Root + Match Data) is returned to the Relayer.
+### Phase 2: Execution (TEE)
+1.  **Aggregation**: The Relayer collects intents for the current `roundId`.
+2.  **Task Trigger**: The Relayer triggers an iExec task, passing the encrypted intents as input files.
+3.  **Secure Matching**:
+    *   The TEE worker starts, retrieves the decryption key securely.
+    *   `app.js` decrypts orders and runs the matching algorithm.
+    *   It generates a **Batch Match** (pairs of buys/sells).
+4.  **Commitment**: The TEE generates a **Merkle Tree** of the executions. It signs the Root and the specific matches using its enclave key.
+5.  **Output**: The result (encrypted or public, depending on config) is returned to the Relayer.
 
-3.  **Commitment**:
-    *   Relayer posts the **Merkle Root** to the `ShadowPoolRootRegistry` contract.
-    *   Relayer saves match data locally (or serves via API).
-
-4.  **Execution**:
-    *   Frontend detects the round is "Closed" and a root is posted.
-    *   Frontend fetches the **Merkle Proof** and **TEE Signature** for the user's match.
-    *   User signs a transaction to `swap()` on Uniswap v4.
-    *   **ShadowPoolHook** verifies:
-        *   Merkle Proof is valid against the on-chain root.
-        *   TEE Signature is valid.
-        *   Swap parameters match the committed intent.
-    *   Swap executes.
+### Phase 3: Settlement (On-Chain)
+1.  **Root Registration**: The Relayer submits the new Merkle Root to `RootRegistry.sol`.
+2.  **Execution**: The Relayer (or Solvers) submits `swap` transactions to the Uniswap v4 Pool.
+3.  **Verification (The Hook)**:
+    *   `ShadowPoolHook` intercepts the swap.
+    *   It checks `beforeSwap`:
+        *   Is the caller authorized?
+        *   Does the `hookData` contain a valid **Merkle Proof** linking this trade to the committed Root?
+        *   Is the proof signed by the verified TEE signer?
+    *   If valid, the swap proceeds. If not, it reverts.
 
 ---
 
-## 🛠 Operational Scripts
+## 🛠️ Scripts & Commands
 
-Located in `shadow-pool-terminal/scripts/`:
+| Component | Command | Description |
+| :--- | :--- | :--- |
+| **Contracts** | `forge test` | Run smart contract tests in `shadowpool-hook` |
+| **Contracts** | `forge script script/Deploy.s.sol --broadcast` | Deploy contracts to network |
+| **Relayer** | `node scripts/relayer.mjs` | Start the Relayer service (Polling & Execution) |
+| **Server** | `node scripts/server.mjs` | Start the Proof Server (API for frontend) |
+| **Frontend** | `npm run dev` | Start the Next.js frontend (localhost:3000) |
+| **iApp** | `docker build -t image_name .` | Build the TEE application image |
 
-*   **`relayer.mjs`**: The main service. Handles the entire off-chain orchestration.
-*   **`add-liquidity.mjs`**: Adds liquidity to the Uniswap v4 pool (required for trades to execute).
-*   **`check-rlc.mjs`**: Checks the Relayer's RLC balance (Critical for TEE tasks).
-*   **`check-workerpool.mjs`**: Checks current market prices for TEE computing power.
-*   **`redeploy-shadowpool.mjs`**: Full deployment script for all contracts.
+---
 
 ## ⚠️ Troubleshooting
 
-**"Deposit amount exceed wallet balance"**
-*   **Cause**: Relayer wallet has insufficient RLC to stake for the TEE task.
-*   **Fix**: Fund the relayer wallet with RLC on Arbitrum Sepolia. Use `node scripts/check-rlc.mjs` to verify.
+**Relayer: "Task Failed"**
+*   Check if your iExec wallet has enough RLC and ETH (for gas).
+*   Ensure the `IEXEC_APP_ADDRESS` is correct and whitelisted for your workerpool.
 
-**"No bulk access" / "granted_access_error"**
-*   **Cause**: The trader failed to grant DataProtector access to the Relayer or App.
-*   **Fix**: Ensure the frontend "Sign & Permit" step completed successfully. Check browser console for signing errors.
+**Contracts: "InvalidProof"**
+*   Ensure the Merkle Root was successfully registered in `RootRegistry` before the swap transaction was attempted.
+*   Check that the `roundId` in the proof matches the currently active round.
 
-**"Pool not initialized" / "Zero Liquidity"**
-*   **Cause**: Uniswap v4 pool is empty.
-*   **Fix**: Run `node scripts/add-liquidity.mjs` to provision initial liquidity.
+**Frontend: "Signature Denied"**
+*   The wallet must be on the correct network (Arbitrum Sepolia / Base Sepolia).
+*   Ensure you are signing the correct EIP-712 Typed Data structure.
 
 ---
 
 ## 📄 License
 
-MIT
+This project is licensed under the MIT License.
