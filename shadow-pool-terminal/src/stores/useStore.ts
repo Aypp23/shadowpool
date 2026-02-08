@@ -64,6 +64,36 @@ function toDate(value: unknown): Date | null {
   return null;
 }
 
+function normalizeLower(value: unknown): string | null {
+  return typeof value === 'string' ? value.toLowerCase() : null;
+}
+
+function syncExecutedIntentsFromMatches(intents: Intent[], matches: Match[]): Intent[] {
+  const executedProtectedData = new Set<string>();
+  const executedMatchIds = new Set<string>();
+  for (const m of matches) {
+    if (!m.executed) continue;
+    const matchId = normalizeLower(m.id);
+    if (matchId) executedMatchIds.add(matchId);
+    const pd = normalizeLower(m.traderProtectedDataAddress);
+    if (pd) executedProtectedData.add(pd);
+  }
+  if (executedProtectedData.size === 0 && executedMatchIds.size === 0) return intents;
+
+  let changed = false;
+  const next = intents.map((intent) => {
+    if (intent.status !== 'submitted' && intent.status !== 'matched') return intent;
+    const pd = normalizeLower(intent.protectedDataAddress);
+    const matchId = normalizeLower(intent.matchId);
+    const executed =
+      (pd && executedProtectedData.has(pd)) || (matchId && executedMatchIds.has(matchId));
+    if (!executed) return intent;
+    changed = true;
+    return { ...intent, status: 'executed' as const };
+  });
+  return changed ? next : intents;
+}
+
 function reviveIntent(raw: unknown, defaultTrader: string | null): Intent | null {
   if (!raw || typeof raw !== 'object') return null;
   const i = raw as Record<string, unknown>;
@@ -200,17 +230,22 @@ export const useStore = create<ShadowPoolStore>()(
       
       matches: [],
       
-      updateMatch: (id, updates) => set((state) => ({
-        matches: state.matches.map(match => 
-          match.id === id ? { ...match, ...updates } : match
-        )
-      })),
+      updateMatch: (id, updates) =>
+        set((state) => {
+          const nextMatches = state.matches.map((match) =>
+            match.uid === id ? { ...match, ...updates } : match
+          );
+          const nextIntents = syncExecutedIntentsFromMatches(state.intents, nextMatches);
+          return nextIntents === state.intents ? { matches: nextMatches } : { matches: nextMatches, intents: nextIntents };
+        }),
 
       upsertMatches: (matches) =>
         set((state) => {
-          const byId = new Map(state.matches.map((m) => [m.id, m]));
-          for (const match of matches) byId.set(match.id, match);
-          return { matches: Array.from(byId.values()) };
+          const byId = new Map(state.matches.map((m) => [m.uid, m]));
+          for (const match of matches) byId.set(match.uid, match);
+          const nextMatches = Array.from(byId.values());
+          const nextIntents = syncExecutedIntentsFromMatches(state.intents, nextMatches);
+          return nextIntents === state.intents ? { matches: nextMatches } : { matches: nextMatches, intents: nextIntents };
         }),
       
       adminActions: [],

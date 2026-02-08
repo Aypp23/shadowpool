@@ -67,6 +67,15 @@ function decodeBalanceDelta(delta: bigint): { amount0: bigint; amount1: bigint }
   return { amount0, amount1 };
 }
 
+function toMatchUid(args: { roundId: string; matchId: string; matchIdHash?: string | null }): string {
+  const round = typeof args.roundId === 'string' ? args.roundId.toLowerCase() : '';
+  const hash =
+    typeof args.matchIdHash === 'string' && args.matchIdHash.startsWith('0x') && args.matchIdHash.length === 66
+      ? args.matchIdHash.toLowerCase()
+      : keccak256(toBytes(args.matchId)).toLowerCase();
+  return `${round}:${hash}`;
+}
+
 export function setShadowPoolEthereumProvider(
   provider: ConstructorParameters<typeof IExecDataProtector>[0] | null
 ) {
@@ -910,11 +919,11 @@ function toRoundPhase(args: {
 }
 
 function upsertMockMatches(next: Match[]) {
-  const byId = new Map(MOCK_MATCHES.map((m) => [m.id, m]));
+  const byId = new Map(MOCK_MATCHES.map((m) => [m.uid, m]));
   for (const m of next) {
-    const existing = byId.get(m.id);
+    const existing = byId.get(m.uid);
     if (!existing) {
-      byId.set(m.id, m);
+      byId.set(m.uid, m);
       continue;
     }
     const merged: Match = {
@@ -929,7 +938,7 @@ function upsertMockMatches(next: Match[]) {
       executedAt: existing.executedAt ?? m.executedAt,
       executionTxHash: existing.executionTxHash ?? m.executionTxHash,
     };
-    byId.set(m.id, merged);
+    byId.set(m.uid, merged);
   }
   MOCK_MATCHES.splice(0, MOCK_MATCHES.length, ...Array.from(byId.values()));
 }
@@ -1230,6 +1239,7 @@ export async function runBatchRound(
           : undefined;
 
       const match: Match = {
+        uid: toMatchUid({ roundId, matchId: mo.matchId, matchIdHash: mo.matchIdHash }),
         id: mo.matchId,
         roundId,
         trader: mo.trader,
@@ -1444,6 +1454,7 @@ export async function fetchRelayerMatches(
       const tokenOutLabel = tokenLabelMap.get(tokenOutAddress.toLowerCase());
 
       matches.push({
+        uid: toMatchUid({ roundId, matchId, matchIdHash: typeof matchIdHash === 'string' ? matchIdHash : null }),
         id: matchId,
         roundId,
         trader: typeof mo.trader === 'string' ? mo.trader : '',
@@ -1545,7 +1556,7 @@ export async function postRoundRoot(
 export async function generateHookData(matchId: string): Promise<HookData> {
   console.log('[ShadowPool] Generating hook data for match:', matchId);
   
-  const match = MOCK_MATCHES.find(m => m.id === matchId);
+  const match = MOCK_MATCHES.find(m => m.uid === matchId);
   if (!match) {
     throw new Error(`Match not found: ${matchId}`);
   }
@@ -1613,7 +1624,7 @@ export async function generateHookData(matchId: string): Promise<HookData> {
   
   const hookData: HookData = {
     roundId,
-    matchId: match.id,
+    matchId: match.uid,
     matchIdHash,
     trader,
     counterparty,
@@ -1858,7 +1869,7 @@ export async function executeTradeWithProof(hookData: HookData): Promise<Executi
       };
     }
 
-    const idx = MOCK_MATCHES.findIndex((m) => m.id === hookData.matchId);
+    const idx = MOCK_MATCHES.findIndex((m) => m.uid === hookData.matchId);
     if (idx >= 0) {
       const prev = MOCK_MATCHES[idx];
       MOCK_MATCHES[idx] = { ...prev, executed: true, executedAt: new Date(), executionTxHash: txHash };

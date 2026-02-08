@@ -125,7 +125,7 @@ export default function ExecuteTrade() {
     if (isPublicView) return;
     const matchId = searchParams.get('match');
     if (matchId && executableMatches.length > 0) {
-      const match = executableMatches.find(m => m.id === matchId);
+      const match = executableMatches.find(m => m.uid === matchId);
       if (match && !match.executed) {
         handleSelectMatch(match);
       }
@@ -133,8 +133,8 @@ export default function ExecuteTrade() {
   }, [searchParams, executableMatches]);
 
   const handleSelectMatch = async (match: Match) => {
-    if (activeHookMatchId.current === match.id) return;
-    const sameMatch = selectedMatch?.id === match.id;
+    if (activeHookMatchId.current === match.uid) return;
+    const sameMatch = selectedMatch?.uid === match.uid;
     const signatureChanged =
       !!hookData &&
       !!match.signature &&
@@ -144,18 +144,18 @@ export default function ExecuteTrade() {
     setHookData(null);
     setExecutionResult(null);
     setIsLoadingHookData(true);
-    activeHookMatchId.current = match.id;
+    activeHookMatchId.current = match.uid;
 
     try {
-      const data = await generateHookData(match.id);
+      const data = await generateHookData(match.uid);
       setHookData(data);
-      updateMatch(match.id, { signature: data.signature });
+      updateMatch(match.uid, { signature: data.signature });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Failed to generate hook data';
       toast.error(msg);
     } finally {
       setIsLoadingHookData(false);
-      if (activeHookMatchId.current === match.id) {
+      if (activeHookMatchId.current === match.uid) {
         activeHookMatchId.current = null;
       }
     }
@@ -180,7 +180,7 @@ export default function ExecuteTrade() {
         setShowConfetti(true);
         toast.success('Trade executed successfully!');
         if (selectedMatch) {
-          updateMatch(selectedMatch.id, {
+          updateMatch(selectedMatch.uid, {
             executed: true,
             executedAt: new Date(),
             executionTxHash: result.txHash,
@@ -223,7 +223,19 @@ export default function ExecuteTrade() {
   const canExecuteAsTrader = hookData ? connectedAddress === traderAddress : true;
   const hookDataMismatchReason = (() => {
     if (!hookData || !selectedMatch) return null;
-    if (hookData.matchId !== selectedMatch.id) return 'match';
+    if (hookData.matchId !== selectedMatch.uid) return 'match';
+    if (
+      selectedMatch.matchIdHash &&
+      hookData.matchIdHash.toLowerCase() !== selectedMatch.matchIdHash.toLowerCase()
+    ) {
+      return 'matchIdHash';
+    }
+    if (
+      /^0x[a-fA-F0-9]{64}$/.test(selectedMatch.roundId) &&
+      hookData.roundId.toLowerCase() !== selectedMatch.roundId.toLowerCase()
+    ) {
+      return 'roundId';
+    }
     if (hookData.tokenIn.toLowerCase() !== selectedMatch.tokenIn.address.toLowerCase()) return 'tokenIn';
     if (hookData.tokenOut.toLowerCase() !== selectedMatch.tokenOut.address.toLowerCase()) return 'tokenOut';
     const hookAmountIn = normalizeAmount(hookData.amountIn);
@@ -269,11 +281,11 @@ export default function ExecuteTrade() {
                   const isMatchDisabled = match.executed;
                   return (
                   <button
-                    key={match.id}
+                    key={match.uid}
                     disabled={isMatchDisabled}
                     onClick={() => handleSelectMatch(match)}
                     className={`w-full p-4 rounded-xl text-left transition-all border border-transparent ${
-                      selectedMatch?.id === match.id
+                      selectedMatch?.uid === match.uid
                         ? 'bg-primary/5 border-primary/20'
                         : isMatchDisabled
                           ? 'opacity-50 cursor-not-allowed'

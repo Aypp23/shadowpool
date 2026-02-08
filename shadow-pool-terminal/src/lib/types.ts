@@ -74,6 +74,7 @@ export interface Round {
 
 // Match Types
 export interface Match {
+  uid: string;
   id: string;
   roundId: string;
   trader: string;

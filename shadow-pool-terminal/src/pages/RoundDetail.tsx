@@ -314,7 +314,7 @@ export default function RoundDetail() {
                     const minOut = formatTokenAmount(match.minAmountOut, decimalsOut, 4);
                     return (
                       <motion.div
-                        key={match.id}
+                        key={match.uid}
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
@@ -370,7 +370,7 @@ export default function RoundDetail() {
                               </Button>
                             ) : isExecutable ? (
                               <Button asChild size="sm" variant="outline">
-                                <Link to={`/execute?match=${match.id}`}>Execute</Link>
+                                <Link to={`/execute?match=${match.uid}`}>Execute</Link>
                               </Button>
                             ) : (
                               <span className="text-xs text-muted-foreground">Not executable</span>

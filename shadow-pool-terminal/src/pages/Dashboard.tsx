@@ -372,12 +372,6 @@ export default function Dashboard() {
                     </div>
                     <h2 className="font-serif text-2xl font-bold">My Intents</h2>
                   </div>
-                  <Link 
-                    to="/create" 
-                    className="text-sm text-primary hover:text-primary/80 flex items-center gap-1 font-semibold transition-colors"
-                  >
-                    View all <ChevronRight className="w-4 h-4" />
-                  </Link>
                 </div>
                 
                 <div className="relative divide-y divide-white/[0.03]">
