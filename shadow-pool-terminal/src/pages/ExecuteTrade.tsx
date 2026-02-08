@@ -80,7 +80,6 @@ export default function ExecuteTrade() {
       matches.filter(
         (m) =>
           m.proofAvailable &&
-          !m.executed &&
           m.expiry.getTime() > now &&
           (viewerAddress ? m.trader?.toLowerCase() === viewerAddress : false)
       )
@@ -127,7 +126,7 @@ export default function ExecuteTrade() {
     const matchId = searchParams.get('match');
     if (matchId && executableMatches.length > 0) {
       const match = executableMatches.find(m => m.id === matchId);
-      if (match) {
+      if (match && !match.executed) {
         handleSelectMatch(match);
       }
     }
@@ -267,14 +266,18 @@ export default function ExecuteTrade() {
               <div className="grid gap-3">
                 {executableMatches.map((match) => {
                   const side = getMatchSide(match.id);
+                  const isMatchDisabled = match.executed;
                   return (
                   <button
                     key={match.id}
+                    disabled={isMatchDisabled}
                     onClick={() => handleSelectMatch(match)}
                     className={`w-full p-4 rounded-xl text-left transition-all border border-transparent ${
                       selectedMatch?.id === match.id
                         ? 'bg-primary/5 border-primary/20'
-                        : 'hover:bg-white/[0.02]'
+                        : isMatchDisabled
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'hover:bg-white/[0.02]'
                     }`}
                   >
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -285,6 +288,11 @@ export default function ExecuteTrade() {
                               side === 'Buy' ? 'border-emerald-500/40 text-emerald-300' : 'border-rose-500/40 text-rose-300'
                             }`}>
                               {side}
+                            </span>
+                          )}
+                          {match.executed && (
+                            <span className="px-2 py-0.5 rounded-full border border-border/60 text-[10px] uppercase tracking-wider">
+                              Executed
                             </span>
                           )}
                           <span className="font-mono">Match {formatMatchId(match)}</span>
@@ -427,7 +435,13 @@ export default function ExecuteTrade() {
                 {/* Execute Button */}
                 <Button
                   onClick={handleExecute}
-                  disabled={isExecuting || (executionResult?.success === true) || !canExecuteAsTrader || !isHookDataAligned}
+                  disabled={
+                    isExecuting ||
+                    selectedMatch?.executed === true ||
+                    executionResult?.success === true ||
+                    !canExecuteAsTrader ||
+                    !isHookDataAligned
+                  }
                   size="lg"
                   className="w-full press-scale amber-glow"
                 >
@@ -436,7 +450,7 @@ export default function ExecuteTrade() {
                       <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                       Executing...
                     </>
-                  ) : executionResult?.success ? (
+                  ) : executionResult?.success || selectedMatch?.executed ? (
                     <>
                       <CheckCircle2 className="w-5 h-5 mr-2" />
                       Executed

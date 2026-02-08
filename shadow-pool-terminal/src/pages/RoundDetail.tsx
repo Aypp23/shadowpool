@@ -300,6 +300,7 @@ export default function RoundDetail() {
                   {viewerMatches.map((match, index) => {
                     const isExecutable =
                       match.proofAvailable && !match.executed && match.expiry.getTime() > Date.now();
+                    const isExecuted = match.executed;
                     const side = getMatchSide(match.id);
                     const decimalsIn =
                       typeof match.tokenIn.decimals === 'number' && Number.isFinite(match.tokenIn.decimals)
@@ -317,7 +318,9 @@ export default function RoundDetail() {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="rounded-2xl border border-border/40 bg-transparent p-4 sm:p-5"
+                        className={`rounded-2xl border border-border/40 bg-transparent p-4 sm:p-5 ${
+                          isExecuted ? 'opacity-50' : ''
+                        }`}
                       >
                         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                           <div className="min-w-0 flex-1">
@@ -361,7 +364,11 @@ export default function RoundDetail() {
                           </div>
 
                           <div className="shrink-0">
-                            {isExecutable ? (
+                            {isExecuted ? (
+                              <Button size="sm" variant="outline" disabled className="cursor-not-allowed">
+                                Executed
+                              </Button>
+                            ) : isExecutable ? (
                               <Button asChild size="sm" variant="outline">
                                 <Link to={`/execute?match=${match.id}`}>Execute</Link>
                               </Button>
